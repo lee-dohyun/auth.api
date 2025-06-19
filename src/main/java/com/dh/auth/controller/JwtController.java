@@ -11,4 +11,20 @@ public class JwtController {
     public String getSampleJwt(@RequestParam(name = "username", defaultValue = "sampleUser") String username) {
         return JWTUtil.generateSampleToken(username);
     }
+
+    @GetMapping("/api/jwt/login")
+    public String login(
+            @RequestParam(name = "email") String email,
+            @RequestParam(name = "password") String password) {
+        // Hardcoded credentials for sample
+        String validEmail = "test@example.com";
+        String validPassword = "password123";
+
+        if (validEmail.equals(email) && validPassword.equals(password)) {
+            // Issue JWT token
+            return JWTUtil.generateSampleToken(email);
+        } else {
+            return "Invalid email or password";
+        }
+    }
 }
