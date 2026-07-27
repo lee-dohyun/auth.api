@@ -1,5 +1,8 @@
 package com.dh.auth.controller;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -85,6 +88,7 @@ public class AuthController {
         if (email == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(new MeResponse(email, name));
+        String decodedName = name == null ? null : URLDecoder.decode(name, StandardCharsets.UTF_8);
+        return ResponseEntity.ok(new MeResponse(email, decodedName));
     }
 }
