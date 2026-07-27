@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -66,16 +67,31 @@ public class AuthController {
 
     @PostMapping("/api/auth/logout")
     public ResponseEntity<Void> logout() {
-        ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, "")
+        return ResponseEntity.ok()
+                .header("Set-Cookie", clearedCookie().toString())
+                .build();
+    }
+
+    @DeleteMapping("/api/auth/me")
+    public ResponseEntity<Void> deleteMe(
+            @RequestHeader(value = "X-User-Email", required = false) String email) {
+        if (email == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        keycloakClient.deleteUser(email);
+        return ResponseEntity.ok()
+                .header("Set-Cookie", clearedCookie().toString())
+                .build();
+    }
+
+    private ResponseCookie clearedCookie() {
+        return ResponseCookie.from(ACCESS_TOKEN_COOKIE, "")
                 .domain(COOKIE_DOMAIN)
                 .httpOnly(true)
                 .secure(true)
                 .path("/")
                 .maxAge(0)
                 .sameSite("Lax")
-                .build();
-        return ResponseEntity.ok()
-                .header("Set-Cookie", cookie.toString())
                 .build();
     }
 

@@ -147,6 +147,19 @@ public class KeycloakClient {
         return new com.dh.auth.dto.AuthDtos.MeResponse(finalEmail, finalName);
     }
 
+    /** Keycloak Admin API로 사용자를 완전히 삭제한다. */
+    public void deleteUser(String email) {
+        String token = serviceAccountToken();
+        Map<String, Object> user = findUserByEmail(email, token);
+        String userId = (String) user.get("id");
+
+        restClient.delete()
+                .uri("/admin/realms/{realm}/users/{id}", realm, userId)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> findUserByEmail(String email, String token) {
         java.util.List<Map<String, Object>> users = restClient.get()
