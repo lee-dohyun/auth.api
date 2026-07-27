@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: auth.api
+
+server:
+  port: ${SERVER_PORT:8080}
+
+keycloak:
+  url: ${KEYCLOAK_URL:http://keycloak-service.keycloak.svc.cluster.local}
+  realm: ${KEYCLOAK_REALM:customer}
+  client-id: ${KEYCLOAK_CLIENT_ID:auth-api-backend}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:}
