@@ -10,4 +10,7 @@ public class AuthDtos {
 
     public record MeResponse(String email, String name) {
     }
+
+    public record UpdateMeRequest(String email, String name, String password) {
+    }
 }

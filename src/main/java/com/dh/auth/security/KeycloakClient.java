@@ -104,4 +104,59 @@ public class KeycloakClient {
             throw e;
         }
     }
+
+    /** 이메일/이름/비밀번호 중 값이 있는 항목만 Keycloak Admin API로 갱신한다. */
+    public com.dh.auth.dto.AuthDtos.MeResponse updateUser(
+            String currentEmail, String newEmail, String newName, String newPassword) {
+        String token = serviceAccountToken();
+        Map<String, Object> user = findUserByEmail(currentEmail, token);
+        String userId = (String) user.get("id");
+
+        Map<String, Object> fields = new java.util.HashMap<>();
+        if (newEmail != null && !newEmail.isBlank()) {
+            fields.put("email", newEmail);
+            fields.put("username", newEmail);
+        }
+        if (newName != null && !newName.isBlank()) {
+            fields.put("firstName", newName);
+        }
+        if (!fields.isEmpty()) {
+            restClient.put()
+                    .uri("/admin/realms/{realm}/users/{id}", realm, userId)
+                    .header("Authorization", "Bearer " + token)
+                    .body(fields)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+
+        if (newPassword != null && !newPassword.isBlank()) {
+            Map<String, Object> credential = Map.of(
+                    "type", "password",
+                    "value", newPassword,
+                    "temporary", false);
+            restClient.put()
+                    .uri("/admin/realms/{realm}/users/{id}/reset-password", realm, userId)
+                    .header("Authorization", "Bearer " + token)
+                    .body(credential)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+
+        String finalEmail = (newEmail != null && !newEmail.isBlank()) ? newEmail : currentEmail;
+        String finalName = (newName != null && !newName.isBlank()) ? newName : (String) user.get("firstName");
+        return new com.dh.auth.dto.AuthDtos.MeResponse(finalEmail, finalName);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> findUserByEmail(String email, String token) {
+        java.util.List<Map<String, Object>> users = restClient.get()
+                .uri("/admin/realms/{realm}/users?email={email}&exact=true", realm, email)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(java.util.List.class);
+        if (users == null || users.isEmpty()) {
+            throw new IllegalStateException("사용자를 찾을 수 없음: " + email);
+        }
+        return users.get(0);
+    }
 }

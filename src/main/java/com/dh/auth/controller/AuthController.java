@@ -8,6 +8,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import com.dh.auth.dto.AuthDtos.LoginRequest;
 import com.dh.auth.dto.AuthDtos.MeResponse;
 import com.dh.auth.dto.AuthDtos.SignupRequest;
+import com.dh.auth.dto.AuthDtos.UpdateMeRequest;
 import com.dh.auth.security.KeycloakClient;
 
 @RestController
@@ -90,5 +92,17 @@ public class AuthController {
         }
         String decodedName = name == null ? null : URLDecoder.decode(name, StandardCharsets.UTF_8);
         return ResponseEntity.ok(new MeResponse(email, decodedName));
+    }
+
+    @PutMapping("/api/auth/me")
+    public ResponseEntity<MeResponse> updateMe(
+            @RequestHeader(value = "X-User-Email", required = false) String currentEmail,
+            @RequestBody UpdateMeRequest request) {
+        if (currentEmail == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        MeResponse updated = keycloakClient.updateUser(
+                currentEmail, request.email(), request.name(), request.password());
+        return ResponseEntity.ok(updated);
     }
 }
