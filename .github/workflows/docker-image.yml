@@ -40,4 +40,22 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.PROJECT_NAME }}:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.PROJECT_NAME }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.PROJECT_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: [self-hosted, k3s-home]
+
+    steps:
+      - name: Deploy new image to K3s
+        run: |
+          /usr/local/bin/kubectl --kubeconfig=/home/leedohyun/.kube-ci/auth-api-deployer.kubeconfig \
+            set image deployment/auth-api auth-api=leedohyun1985/auth.api:${{ github.sha }} -n customer
+
+      - name: Wait for rollout
+        run: |
+          /usr/local/bin/kubectl --kubeconfig=/home/leedohyun/.kube-ci/auth-api-deployer.kubeconfig \
+            rollout status deployment/auth-api -n customer --timeout=120s
