@@ -9,7 +9,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 /**
- * order.api의 OrderNotificationService와 동일한 패턴(Spring Mail + Gmail SMTP relay)으로
+ * order.api의 OrderNotificationService와 동일한 패턴(Spring Mail, 자체 메일서버 SMTP 릴레이)으로
  * 회원가입 이메일 인증 메일을 발송한다.
  */
 @Service
@@ -36,6 +36,7 @@ public class EmailVerificationService {
         String verifyUrl = frontendBaseUrl + "/verify?email=" + urlEncode(email) + "&token=" + urlEncode(token);
         try {
             SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom("customer-service@leedohyun.com");
             message.setTo(email);
             message.setSubject("[leedohyun.com] 이메일 인증을 완료해주세요");
             message.setText(
