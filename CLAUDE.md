@@ -35,3 +35,16 @@ The app needs Postgres. Connection defaults come from `application-local.yml` (`
 ## Related services
 
 - [gateway](../gateway) — validates JWTs against this service's JWKS endpoint and forwards identity via `X-User-Id`/`X-User-Role` headers.
+
+## Important: new endpoints under `customer.leedohyun.com` need a gateway whitelist edit too
+
+`customer.leedohyun.com` is a `PROTECTED_HOSTS` entry in `gateway`'s `JwtAuthenticationFilter` — any
+request to it without a valid `ACCESS_TOKEN` cookie gets 302-redirected to `home.leedohyun.com`, silently,
+with no error surfaced to the caller. Whenever a new endpoint here is meant to be callable **before
+login** (like `/api/auth/login`, `/api/auth/signup`, `/api/auth/verify-email`,
+`/api/auth/resend-verification` already are), it must also be added to `PUBLIC_EXACT_PATHS` (or
+`PUBLIC_PATH_PREFIXES`) in `gateway`'s `JwtAuthenticationFilter.java` — this repo's own route mapping
+has no effect on that decision, since the two repos are decoupled. This bit twice already: once for the
+verify-email API path itself, and once more (2026-08-02) for `customer.front`'s `/verify` *page* path,
+which is a separate whitelist entry from the API path it calls. See `gateway/CLAUDE.md`'s "Key
+implication for changes" section for the mechanics and incident history.
