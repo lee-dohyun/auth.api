@@ -1,6 +1,17 @@
 spring:
   application:
     name: auth.api
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 server:
   port: ${SERVER_PORT:8080}
@@ -10,3 +21,6 @@ keycloak:
   realm: ${KEYCLOAK_REALM:customer}
   client-id: ${KEYCLOAK_CLIENT_ID:auth-api-backend}
   client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:https://customer.leedohyun.com}
