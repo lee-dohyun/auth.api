@@ -23,4 +23,6 @@ keycloak:
   client-secret: ${KEYCLOAK_CLIENT_SECRET:}
 
 app:
-  frontend-base-url: ${FRONTEND_BASE_URL:https://customer.leedohyun.com}
+  frontend-base-url: ${FRONTEND_BASE_URL:https://customer.posselect.com}
+  cookie-domain: ${COOKIE_DOMAIN:.posselect.com}
+  cors-allowed-origin-pattern: ${CORS_ALLOWED_ORIGIN_PATTERN:https://*.posselect.com}

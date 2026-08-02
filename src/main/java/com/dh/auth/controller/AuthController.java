@@ -3,6 +3,7 @@ package com.dh.auth.controller;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -33,14 +34,18 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
-    private static final String COOKIE_DOMAIN = ".leedohyun.com";
 
+    private final String cookieDomain;
     private final KeycloakClient keycloakClient;
     private final EmailVerificationService emailVerificationService;
 
-    public AuthController(KeycloakClient keycloakClient, EmailVerificationService emailVerificationService) {
+    public AuthController(
+            KeycloakClient keycloakClient,
+            EmailVerificationService emailVerificationService,
+            @Value("${app.cookie-domain}") String cookieDomain) {
         this.keycloakClient = keycloakClient;
         this.emailVerificationService = emailVerificationService;
+        this.cookieDomain = cookieDomain;
     }
 
     @PostMapping("/api/auth/signup")
@@ -97,7 +102,7 @@ public class AuthController {
         }
 
         ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, token.accessToken())
-                .domain(COOKIE_DOMAIN)
+                .domain(cookieDomain)
                 .httpOnly(true)
                 .secure(true)
                 .path("/")
@@ -131,7 +136,7 @@ public class AuthController {
 
     private ResponseCookie clearedCookie() {
         return ResponseCookie.from(ACCESS_TOKEN_COOKIE, "")
-                .domain(COOKIE_DOMAIN)
+                .domain(cookieDomain)
                 .httpOnly(true)
                 .secure(true)
                 .path("/")
