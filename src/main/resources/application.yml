@@ -16,6 +16,15 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 keycloak:
   url: ${KEYCLOAK_URL:http://keycloak-service.keycloak.svc.cluster.local}
   realm: ${KEYCLOAK_REALM:customer}
