@@ -26,3 +26,5 @@ app:
   frontend-base-url: ${FRONTEND_BASE_URL:https://customer.posselect.com}
   cookie-domain: ${COOKIE_DOMAIN:.posselect.com}
   cors-allowed-origin-pattern: ${CORS_ALLOWED_ORIGIN_PATTERN:https://*.posselect.com}
+  mail-from: ${MAIL_FROM:customer-service@posselect.com}
+  brand-name: ${BRAND_NAME:posselect.com}

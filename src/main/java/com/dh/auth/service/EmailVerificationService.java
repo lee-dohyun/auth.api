@@ -19,12 +19,18 @@ public class EmailVerificationService {
 
     private final JavaMailSender mailSender;
     private final String frontendBaseUrl;
+    private final String mailFrom;
+    private final String brandName;
 
     public EmailVerificationService(
             JavaMailSender mailSender,
-            @Value("${app.frontend-base-url}") String frontendBaseUrl) {
+            @Value("${app.frontend-base-url}") String frontendBaseUrl,
+            @Value("${app.mail-from}") String mailFrom,
+            @Value("${app.brand-name}") String brandName) {
         this.mailSender = mailSender;
         this.frontendBaseUrl = frontendBaseUrl;
+        this.mailFrom = mailFrom;
+        this.brandName = brandName;
     }
 
     /**
@@ -36,9 +42,9 @@ public class EmailVerificationService {
         String verifyUrl = frontendBaseUrl + "/verify?email=" + urlEncode(email) + "&token=" + urlEncode(token);
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("customer-service@leedohyun.com");
+            message.setFrom(mailFrom);
             message.setTo(email);
-            message.setSubject("[leedohyun.com] 이메일 인증을 완료해주세요");
+            message.setSubject("[" + brandName + "] 이메일 인증을 완료해주세요");
             message.setText(
                     (name == null || name.isBlank() ? email : name) + "님, 회원가입해주셔서 감사합니다.\n\n"
                             + "아래 링크를 클릭하면 이메일 인증이 완료됩니다 (24시간 이내 유효):\n"
