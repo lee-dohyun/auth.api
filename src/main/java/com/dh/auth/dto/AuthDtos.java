@@ -11,10 +11,28 @@ public class AuthDtos {
             @NotBlank(message = "이름을 입력하세요.") String name) {
     }
 
-    public record LoginRequest(String email, String password) {
+    public record LoginRequest(String email, String password, Boolean rememberMe) {
     }
 
     public record MeResponse(String email, String name) {
+    }
+
+    public record FindIdRequest(
+            @NotBlank(message = "이름을 입력하세요.") String name,
+            @NotBlank(message = "가입일을 입력하세요.") String joinDate) {
+    }
+
+    public record FindIdResponse(String maskedEmail) {
+    }
+
+    public record ForgotPasswordRequest(
+            @NotBlank @Email String email) {
+    }
+
+    public record ResetPasswordRequest(
+            @NotBlank @Email String email,
+            @NotBlank String token,
+            @NotBlank(message = "비밀번호를 입력하세요.") String newPassword) {
     }
 
     public record UpdateMeRequest(String email, String name, String password) {

@@ -56,6 +56,29 @@ public class EmailVerificationService {
         }
     }
 
+    /**
+     * 비밀번호 재설정 메일을 발송한다. sendVerificationEmail과 동일하게 실패해도 예외를 던지지
+     * 않는다 — forgot-password 엔드포인트는 이메일 존재 여부를 응답으로 노출하지 않기 위해
+     * 항상 200을 반환하므로, 여기서 던져도 호출부가 다르게 응답할 수 없다.
+     */
+    public void sendPasswordResetEmail(String email, String name, String token) {
+        String resetUrl = frontendBaseUrl + "/reset-password?email=" + urlEncode(email) + "&token=" + urlEncode(token);
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(mailFrom);
+            message.setTo(email);
+            message.setSubject("[" + brandName + "] 비밀번호 재설정 안내");
+            message.setText(
+                    (name == null || name.isBlank() ? email : name) + "님, 비밀번호 재설정을 요청하셨습니다.\n\n"
+                            + "아래 링크에서 새 비밀번호를 설정해주세요 (1시간 이내 유효):\n"
+                            + resetUrl + "\n\n"
+                            + "본인이 요청하지 않았다면 이 메일을 무시하세요.\n");
+            mailSender.send(message);
+        } catch (MailException e) {
+            log.warn("비밀번호 재설정 메일 발송 실패 (email={})", email, e);
+        }
+    }
+
     private String urlEncode(String value) {
         return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
     }

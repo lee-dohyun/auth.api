@@ -3,11 +3,14 @@ package com.dh.auth.controller;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,9 +21,13 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpClientErrorException;
 
 import com.dh.auth.dto.AuthDtos.ErrorResponse;
+import com.dh.auth.dto.AuthDtos.FindIdRequest;
+import com.dh.auth.dto.AuthDtos.FindIdResponse;
+import com.dh.auth.dto.AuthDtos.ForgotPasswordRequest;
 import com.dh.auth.dto.AuthDtos.LoginRequest;
 import com.dh.auth.dto.AuthDtos.MeResponse;
 import com.dh.auth.dto.AuthDtos.ResendVerificationRequest;
+import com.dh.auth.dto.AuthDtos.ResetPasswordRequest;
 import com.dh.auth.dto.AuthDtos.SignupRequest;
 import com.dh.auth.dto.AuthDtos.UpdateMeRequest;
 import com.dh.auth.dto.AuthDtos.VerifyEmailRequest;
@@ -33,7 +40,10 @@ import jakarta.validation.Valid;
 @RestController
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
+    private static final String REFRESH_TOKEN_COOKIE = "REFRESH_TOKEN";
+    private static final String REFRESH_TOKEN_PATH = "/api/auth";
 
     private final String cookieDomain;
     private final KeycloakClient keycloakClient;
@@ -96,12 +106,53 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        if (!keycloakClient.isEmailVerified(request.email())) {
+        KeycloakClient.UserInfo user = keycloakClient.findUser(request.email());
+        if (!user.emailVerified()) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ErrorResponse("EMAIL_NOT_VERIFIED"));
         }
 
-        ResponseCookie cookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, token.accessToken())
+        log.info("로그인 성공 - 고객번호={}, 이메일={}, 고객명={}", user.id(), user.email(), user.name());
+
+        ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, token.accessToken())
+                .domain(cookieDomain)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(token.expiresInSeconds())
+                .sameSite("Lax")
+                .build();
+
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok().header("Set-Cookie", accessCookie.toString());
+        if (Boolean.TRUE.equals(request.rememberMe())) {
+            response.header("Set-Cookie", refreshCookie(token.refreshToken(), token.refreshExpiresInSeconds()).toString());
+        }
+        return response.build();
+    }
+
+    /**
+     * "로그인 상태 유지"로 로그인한 경우 프론트가 액세스 토큰 만료 전에 주기 호출하는 엔드포인트.
+     * REFRESH_TOKEN 쿠키가 없거나 만료/폐기된 경우 401을 반환 — 이 경우 프론트는 재발급을
+     * 포기하고 다음 보호된 페이지 접근 시 자연스럽게 재로그인으로 유도된다.
+     */
+    @PostMapping("/api/auth/refresh")
+    public ResponseEntity<Void> refresh(
+            @CookieValue(value = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+        if (refreshToken == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        KeycloakClient.TokenResponse token;
+        try {
+            token = keycloakClient.refreshToken(refreshToken);
+        } catch (HttpClientErrorException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .header("Set-Cookie", clearedCookie(ACCESS_TOKEN_COOKIE, "/").toString())
+                    .header("Set-Cookie", clearedCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_PATH).toString())
+                    .build();
+        }
+
+        ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, token.accessToken())
                 .domain(cookieDomain)
                 .httpOnly(true)
                 .secure(true)
@@ -111,14 +162,53 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", cookie.toString())
+                .header("Set-Cookie", accessCookie.toString())
+                .header("Set-Cookie", refreshCookie(token.refreshToken(), token.refreshExpiresInSeconds()).toString())
                 .build();
+    }
+
+    /**
+     * 이름 + 가입일로 이메일을 찾는다. 정확히 하나만 일치하면 마스킹된 이메일을 200으로,
+     * 일치하는 계정이 없거나 특정할 수 없으면(동명이인 등) 404를 반환한다.
+     */
+    @PostMapping("/api/auth/find-id")
+    public ResponseEntity<FindIdResponse> findId(@Valid @RequestBody FindIdRequest request) {
+        return keycloakClient.findEmailByNameAndJoinDate(request.name(), request.joinDate())
+                .map(email -> ResponseEntity.ok(new FindIdResponse(maskEmail(email))))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    /**
+     * 비밀번호 재설정 메일 발송. 존재하지 않는 이메일이어도 200을 반환한다(resend-verification과
+     * 동일하게 이메일 존재 여부를 노출하지 않기 위함).
+     */
+    @PostMapping("/api/auth/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        try {
+            KeycloakClient.UserInfo user = keycloakClient.findUser(request.email());
+            KeycloakClient.VerificationToken reset = keycloakClient.issuePasswordResetToken(request.email());
+            emailVerificationService.sendPasswordResetEmail(request.email(), user.name(), reset.token());
+        } catch (RuntimeException e) {
+            // 사용자를 못 찾는 경우 등 — 존재 여부를 노출하지 않기 위해 조용히 무시
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    /** 비밀번호 재설정 메일의 링크가 호출하는 엔드포인트. 성공 시 200, 토큰이 없거나 만료/불일치면 400. */
+    @PostMapping("/api/auth/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        boolean reset = keycloakClient.resetPassword(request.email(), request.token(), request.newPassword());
+        if (!reset) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/api/auth/logout")
     public ResponseEntity<Void> logout() {
         return ResponseEntity.ok()
-                .header("Set-Cookie", clearedCookie().toString())
+                .header("Set-Cookie", clearedCookie(ACCESS_TOKEN_COOKIE, "/").toString())
+                .header("Set-Cookie", clearedCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_PATH).toString())
                 .build();
     }
 
@@ -130,19 +220,40 @@ public class AuthController {
         }
         keycloakClient.deleteUser(email);
         return ResponseEntity.ok()
-                .header("Set-Cookie", clearedCookie().toString())
+                .header("Set-Cookie", clearedCookie(ACCESS_TOKEN_COOKIE, "/").toString())
+                .header("Set-Cookie", clearedCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_PATH).toString())
                 .build();
     }
 
-    private ResponseCookie clearedCookie() {
-        return ResponseCookie.from(ACCESS_TOKEN_COOKIE, "")
+    private ResponseCookie clearedCookie(String name, String path) {
+        return ResponseCookie.from(name, "")
                 .domain(cookieDomain)
                 .httpOnly(true)
                 .secure(true)
-                .path("/")
+                .path(path)
                 .maxAge(0)
                 .sameSite("Lax")
                 .build();
+    }
+
+    private ResponseCookie refreshCookie(String refreshToken, long expiresInSeconds) {
+        return ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
+                .domain(cookieDomain)
+                .httpOnly(true)
+                .secure(true)
+                .path(REFRESH_TOKEN_PATH)
+                .maxAge(expiresInSeconds)
+                .sameSite("Lax")
+                .build();
+    }
+
+    /** user@example.com -> u***@example.com */
+    private String maskEmail(String email) {
+        int at = email.indexOf('@');
+        if (at <= 1) {
+            return email;
+        }
+        return email.charAt(0) + "***" + email.substring(at);
     }
 
     /**
