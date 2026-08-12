@@ -1,0 +1,48 @@
+package com.dh.auth.controller;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.dh.auth.dto.AuthDtos.ErrorResponse;
+import com.dh.auth.dto.AuthDtos.SendPhoneOtpRequest;
+import com.dh.auth.dto.AuthDtos.VerifyPhoneOtpRequest;
+import com.dh.auth.service.PhoneVerificationService;
+import com.dh.auth.service.PhoneVerificationService.OtpCooldownException;
+import com.dh.auth.service.PhoneVerificationService.OtpVerificationException;
+
+import jakarta.validation.Valid;
+
+@Validated
+@RestController
+public class PhoneController {
+
+    private final PhoneVerificationService phoneVerificationService;
+
+    public PhoneController(PhoneVerificationService phoneVerificationService) {
+        this.phoneVerificationService = phoneVerificationService;
+    }
+
+    @PostMapping("/api/auth/phone/send-otp")
+    public ResponseEntity<?> sendOtp(@Valid @RequestBody SendPhoneOtpRequest request) {
+        try {
+            phoneVerificationService.sendOtp(request.phoneNumber());
+        } catch (OtpCooldownException e) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new ErrorResponse(e.getMessage()));
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/api/auth/phone/verify-otp")
+    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyPhoneOtpRequest request) {
+        try {
+            phoneVerificationService.verifyOtp(request.phoneNumber(), request.code());
+        } catch (OtpVerificationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
+        }
+        return ResponseEntity.ok().build();
+    }
+}

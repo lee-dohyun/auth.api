@@ -2,13 +2,30 @@ package com.dh.auth.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 public class AuthDtos {
 
     public record SignupRequest(
             @NotBlank(message = "이메일을 입력하세요.") @Email(message = "올바른 이메일 형식이 아닙니다.") String email,
             @NotBlank(message = "비밀번호를 입력하세요.") String password,
-            @NotBlank(message = "이름을 입력하세요.") String name) {
+            @NotBlank(message = "이름을 입력하세요.") String name,
+            @NotBlank(message = "휴대폰 번호를 입력하세요.")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            String phoneNumber) {
+    }
+
+    public record SendPhoneOtpRequest(
+            @NotBlank(message = "휴대폰 번호를 입력하세요.")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            String phoneNumber) {
+    }
+
+    public record VerifyPhoneOtpRequest(
+            @NotBlank(message = "휴대폰 번호를 입력하세요.")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            String phoneNumber,
+            @NotBlank(message = "인증번호를 입력하세요.") String code) {
     }
 
     public record LoginRequest(String email, String password, Boolean rememberMe) {

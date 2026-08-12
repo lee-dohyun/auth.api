@@ -33,6 +33,8 @@ import com.dh.auth.dto.AuthDtos.UpdateMeRequest;
 import com.dh.auth.dto.AuthDtos.VerifyEmailRequest;
 import com.dh.auth.security.KeycloakClient;
 import com.dh.auth.service.EmailVerificationService;
+import com.dh.auth.service.MemberService;
+import com.dh.auth.service.PhoneVerificationService;
 
 import jakarta.validation.Valid;
 
@@ -48,22 +50,36 @@ public class AuthController {
     private final String cookieDomain;
     private final KeycloakClient keycloakClient;
     private final EmailVerificationService emailVerificationService;
+    private final PhoneVerificationService phoneVerificationService;
+    private final MemberService memberService;
 
     public AuthController(
             KeycloakClient keycloakClient,
             EmailVerificationService emailVerificationService,
+            PhoneVerificationService phoneVerificationService,
+            MemberService memberService,
             @Value("${app.cookie-domain}") String cookieDomain) {
         this.keycloakClient = keycloakClient;
         this.emailVerificationService = emailVerificationService;
+        this.phoneVerificationService = phoneVerificationService;
+        this.memberService = memberService;
         this.cookieDomain = cookieDomain;
     }
 
     @PostMapping("/api/auth/signup")
-    public ResponseEntity<Void> signup(@Valid @RequestBody SignupRequest request) {
+    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest request) {
+        if (!phoneVerificationService.isRecentlyVerified(request.phoneNumber())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("PHONE_NOT_VERIFIED"));
+        }
+
         boolean alreadyExists = keycloakClient.createUser(request.email(), request.name(), request.password());
         if (alreadyExists) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
+
+        KeycloakClient.UserInfo createdUser = keycloakClient.findUser(request.email());
+        memberService.createMemberForSignup(createdUser.id(), request.phoneNumber());
 
         KeycloakClient.VerificationToken verification = keycloakClient.issueVerificationToken(request.email());
         emailVerificationService.sendVerificationEmail(request.email(), request.name(), verification.token());
