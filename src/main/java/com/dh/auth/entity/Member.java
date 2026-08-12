@@ -31,6 +31,14 @@ public class Member {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * 계정 본인인증 전화번호(1인 1번호, phone_verifications 이력의 현재값 스냅샷).
+     * 배송 연락처처럼 여러 개 가질 수 있는 값이 아니므로 여기 두는 게 맞다 — 주소/배송
+     * 연락처가 필요해지면 그건 별도 테이블(예: member_addresses)의 몫.
+     */
+    @Column(name = "current_phone_number", length = 20)
+    private String currentPhoneNumber;
+
     protected Member() {
     }
 
@@ -42,6 +50,10 @@ public class Member {
 
     public void changeGrade(MemberGrade newGrade) {
         this.currentGrade = newGrade;
+    }
+
+    public void changePhoneNumber(String phoneNumber) {
+        this.currentPhoneNumber = phoneNumber;
     }
 
     public Long getId() {
@@ -58,5 +70,9 @@ public class Member {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public String getCurrentPhoneNumber() {
+        return currentPhoneNumber;
     }
 }

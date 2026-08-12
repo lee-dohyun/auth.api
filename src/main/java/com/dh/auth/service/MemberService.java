@@ -36,7 +36,9 @@ public class MemberService {
         MemberGrade defaultGrade = memberGradeRepository.findByIsDefaultTrue()
                 .orElseThrow(() -> new IllegalStateException("기본 등급이 설정되어 있지 않습니다."));
 
-        Member member = memberRepository.save(new Member(keycloakUserId, defaultGrade));
+        Member member = new Member(keycloakUserId, defaultGrade);
+        member.changePhoneNumber(phoneNumber.replace("-", ""));
+        memberRepository.save(member);
         memberGradeHistoryRepository.save(new MemberGradeHistory(member, defaultGrade, "회원가입 기본 등급 부여"));
         phoneVerificationService.linkVerificationToMember(phoneNumber, member);
 
