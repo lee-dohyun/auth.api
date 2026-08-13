@@ -39,15 +39,37 @@ public class PhoneVerificationService {
         this.verificationRepository = verificationRepository;
     }
 
+    /**
+     * 사용자에게 그대로 보여줄 메시지를 예외가 들고 다니면 다국어가 불가능해지므로, 여기서는
+     * 메시지 키와 인자만 들고 나가고 실제 문구는 컨트롤러가 요청 로케일로 해석한다.
+     */
     public static class OtpCooldownException extends RuntimeException {
-        public OtpCooldownException() {
-            super("재발송은 60초 후에 가능합니다.");
+        private final long cooldownSeconds;
+
+        public OtpCooldownException(long cooldownSeconds) {
+            super("otp.cooldown");
+            this.cooldownSeconds = cooldownSeconds;
+        }
+
+        public String getMessageKey() {
+            return "otp.cooldown";
+        }
+
+        public Object[] getMessageArgs() {
+            return new Object[] {cooldownSeconds};
         }
     }
 
     public static class OtpVerificationException extends RuntimeException {
-        public OtpVerificationException(String message) {
-            super(message);
+        private final String messageKey;
+
+        public OtpVerificationException(String messageKey) {
+            super(messageKey);
+            this.messageKey = messageKey;
+        }
+
+        public String getMessageKey() {
+            return messageKey;
         }
     }
 
@@ -62,7 +84,7 @@ public class PhoneVerificationService {
             otpAttemptRepository.save(new PhoneOtpAttempt(normalized, code, now.plus(OTP_TTL)));
         } else {
             if (Duration.between(attempt.getLastSentAt(), now).compareTo(RESEND_COOLDOWN) < 0) {
-                throw new OtpCooldownException();
+                throw new OtpCooldownException(RESEND_COOLDOWN.toSeconds());
             }
             attempt.resend(code, now.plus(OTP_TTL));
         }
@@ -75,20 +97,20 @@ public class PhoneVerificationService {
     public void verifyOtp(String phoneNumber, String submittedCode) {
         String normalized = normalize(phoneNumber);
         PhoneOtpAttempt attempt = otpAttemptRepository.findByPhoneNumber(normalized)
-                .orElseThrow(() -> new OtpVerificationException("인증번호를 먼저 요청하세요."));
+                .orElseThrow(() -> new OtpVerificationException("otp.notRequested"));
 
         if (attempt.getOtpCode() == null) {
-            throw new OtpVerificationException("인증번호를 먼저 요청하세요.");
+            throw new OtpVerificationException("otp.notRequested");
         }
         if (attempt.getOtpExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new OtpVerificationException("인증번호가 만료되었습니다. 다시 요청하세요.");
+            throw new OtpVerificationException("otp.expired");
         }
         if (attempt.getAttemptCount() >= MAX_ATTEMPTS) {
-            throw new OtpVerificationException("인증 시도 횟수를 초과했습니다. 다시 요청하세요.");
+            throw new OtpVerificationException("otp.attemptsExceeded");
         }
         if (!attempt.getOtpCode().equals(submittedCode)) {
             attempt.incrementAttempt();
-            throw new OtpVerificationException("인증번호가 일치하지 않습니다.");
+            throw new OtpVerificationException("otp.mismatch");
         }
 
         attempt.clearOtpCode();

@@ -8,6 +8,8 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import com.dh.auth.config.Messages;
+
 /**
  * order.api의 OrderNotificationService와 동일한 패턴(Spring Mail, 자체 메일서버 SMTP 릴레이)으로
  * 회원가입 이메일 인증 메일을 발송한다.
@@ -18,16 +20,19 @@ public class EmailVerificationService {
     private static final Logger log = LoggerFactory.getLogger(EmailVerificationService.class);
 
     private final JavaMailSender mailSender;
+    private final Messages messages;
     private final String frontendBaseUrl;
     private final String mailFrom;
     private final String brandName;
 
     public EmailVerificationService(
             JavaMailSender mailSender,
+            Messages messages,
             @Value("${app.frontend-base-url}") String frontendBaseUrl,
             @Value("${app.mail-from}") String mailFrom,
             @Value("${app.brand-name}") String brandName) {
         this.mailSender = mailSender;
+        this.messages = messages;
         this.frontendBaseUrl = frontendBaseUrl;
         this.mailFrom = mailFrom;
         this.brandName = brandName;
@@ -44,12 +49,8 @@ public class EmailVerificationService {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(mailFrom);
             message.setTo(email);
-            message.setSubject("[" + brandName + "] 이메일 인증을 완료해주세요");
-            message.setText(
-                    (name == null || name.isBlank() ? email : name) + "님, 회원가입해주셔서 감사합니다.\n\n"
-                            + "아래 링크를 클릭하면 이메일 인증이 완료됩니다 (24시간 이내 유효):\n"
-                            + verifyUrl + "\n\n"
-                            + "본인이 요청하지 않았다면 이 메일을 무시하세요.\n");
+            message.setSubject(messages.get("email.verification.subject", brandName));
+            message.setText(messages.get("email.verification.body", displayName(email, name), verifyUrl));
             mailSender.send(message);
         } catch (MailException e) {
             log.warn("이메일 인증 메일 발송 실패 (email={})", email, e);
@@ -67,16 +68,17 @@ public class EmailVerificationService {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(mailFrom);
             message.setTo(email);
-            message.setSubject("[" + brandName + "] 비밀번호 재설정 안내");
-            message.setText(
-                    (name == null || name.isBlank() ? email : name) + "님, 비밀번호 재설정을 요청하셨습니다.\n\n"
-                            + "아래 링크에서 새 비밀번호를 설정해주세요 (1시간 이내 유효):\n"
-                            + resetUrl + "\n\n"
-                            + "본인이 요청하지 않았다면 이 메일을 무시하세요.\n");
+            message.setSubject(messages.get("email.passwordReset.subject", brandName));
+            message.setText(messages.get("email.passwordReset.body", displayName(email, name), resetUrl));
             mailSender.send(message);
         } catch (MailException e) {
             log.warn("비밀번호 재설정 메일 발송 실패 (email={})", email, e);
         }
+    }
+
+    /** 이름을 안 받은 계정(재발송 등)은 이메일로 부른다. */
+    private String displayName(String email, String name) {
+        return name == null || name.isBlank() ? email : name;
     }
 
     private String urlEncode(String value) {

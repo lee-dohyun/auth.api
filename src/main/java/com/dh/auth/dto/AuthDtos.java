@@ -6,28 +6,32 @@ import jakarta.validation.constraints.Pattern;
 
 public class AuthDtos {
 
+    // 메시지는 messages*.properties에서 요청 로케일(ko/en/zh/ja)에 맞춰 해석된다 — LocaleConfig 참고.
+
     public record SignupRequest(
-            @NotBlank(message = "이메일을 입력하세요.") @Email(message = "올바른 이메일 형식이 아닙니다.") String email,
-            @NotBlank(message = "비밀번호를 입력하세요.") String password,
-            @NotBlank(message = "이름을 입력하세요.") String name,
-            @NotBlank(message = "휴대폰 번호를 입력하세요.")
-            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            @NotBlank(message = "{validation.email.required}")
+            @Email(message = "{validation.email.invalid}")
+            String email,
+            @NotBlank(message = "{validation.password.required}") String password,
+            @NotBlank(message = "{validation.name.required}") String name,
+            @NotBlank(message = "{validation.phone.required}")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "{validation.phone.invalid}")
             String phoneNumber,
             /** 마케팅 정보 수신 동의(선택). 누락되면 동의하지 않은 것으로 본다. */
             Boolean marketingOptIn) {
     }
 
     public record SendPhoneOtpRequest(
-            @NotBlank(message = "휴대폰 번호를 입력하세요.")
-            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            @NotBlank(message = "{validation.phone.required}")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "{validation.phone.invalid}")
             String phoneNumber) {
     }
 
     public record VerifyPhoneOtpRequest(
-            @NotBlank(message = "휴대폰 번호를 입력하세요.")
-            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
+            @NotBlank(message = "{validation.phone.required}")
+            @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "{validation.phone.invalid}")
             String phoneNumber,
-            @NotBlank(message = "인증번호를 입력하세요.") String code) {
+            @NotBlank(message = "{validation.otp.required}") String code) {
     }
 
     public record LoginRequest(String email, String password, Boolean rememberMe) {
@@ -37,8 +41,8 @@ public class AuthDtos {
     }
 
     public record FindIdRequest(
-            @NotBlank(message = "이름을 입력하세요.") String name,
-            @NotBlank(message = "가입일을 입력하세요.") String joinDate) {
+            @NotBlank(message = "{validation.name.required}") String name,
+            @NotBlank(message = "{validation.joinDate.required}") String joinDate) {
     }
 
     public record FindIdResponse(String maskedEmail) {
@@ -51,7 +55,7 @@ public class AuthDtos {
     public record ResetPasswordRequest(
             @NotBlank @Email String email,
             @NotBlank String token,
-            @NotBlank(message = "비밀번호를 입력하세요.") String newPassword) {
+            @NotBlank(message = "{validation.password.required}") String newPassword) {
     }
 
     public record UpdateMeRequest(String email, String name, String password) {

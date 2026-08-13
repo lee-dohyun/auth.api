@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.dh.auth.config.Messages;
 import com.dh.auth.dto.AddressDtos.CreateAddressRequest;
 import com.dh.auth.dto.AddressDtos.UpdateAddressRequest;
 import com.dh.auth.entity.Member;
@@ -22,14 +23,17 @@ public class MemberAddressService {
     private final MemberAddressRepository memberAddressRepository;
     private final MemberRepository memberRepository;
     private final KeycloakClient keycloakClient;
+    private final Messages messages;
 
     public MemberAddressService(
             MemberAddressRepository memberAddressRepository,
             MemberRepository memberRepository,
-            KeycloakClient keycloakClient) {
+            KeycloakClient keycloakClient,
+            Messages messages) {
         this.memberAddressRepository = memberAddressRepository;
         this.memberRepository = memberRepository;
         this.keycloakClient = keycloakClient;
+        this.messages = messages;
     }
 
     @Transactional(readOnly = true)
@@ -97,12 +101,12 @@ public class MemberAddressService {
     private MemberAddress resolveOwnedAddress(String email, Long addressId) {
         Member member = resolveMember(email);
         return memberAddressRepository.findByIdAndMemberId(addressId, member.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "배송지를 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, messages.get("address.notFound")));
     }
 
     private Member resolveMember(String email) {
         KeycloakClient.UserInfo user = keycloakClient.findUser(email);
         return memberRepository.findByKeycloakUserId(user.id())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, messages.get("member.notFound")));
     }
 }

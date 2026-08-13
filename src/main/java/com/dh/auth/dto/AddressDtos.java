@@ -8,20 +8,20 @@ public class AddressDtos {
 
     public record CreateAddressRequest(
             String label,
-            @NotBlank(message = "받는 사람을 입력하세요.") String recipientName,
-            @NotBlank(message = "연락처를 입력하세요.") String phoneNumber,
-            @NotBlank(message = "우편번호를 입력하세요.") String zipCode,
-            @NotBlank(message = "주소를 입력하세요.") String address1,
+            @NotBlank(message = "{validation.recipientName.required}") String recipientName,
+            @NotBlank(message = "{validation.contact.required}") String phoneNumber,
+            @NotBlank(message = "{validation.zipCode.required}") String zipCode,
+            @NotBlank(message = "{validation.address.required}") String address1,
             String address2,
             Boolean isDefault) {
     }
 
     public record UpdateAddressRequest(
             String label,
-            @NotBlank(message = "받는 사람을 입력하세요.") String recipientName,
-            @NotBlank(message = "연락처를 입력하세요.") String phoneNumber,
-            @NotBlank(message = "우편번호를 입력하세요.") String zipCode,
-            @NotBlank(message = "주소를 입력하세요.") String address1,
+            @NotBlank(message = "{validation.recipientName.required}") String recipientName,
+            @NotBlank(message = "{validation.contact.required}") String phoneNumber,
+            @NotBlank(message = "{validation.zipCode.required}") String zipCode,
+            @NotBlank(message = "{validation.address.required}") String address1,
             String address2) {
     }
 

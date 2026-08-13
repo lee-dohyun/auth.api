@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.dh.auth.config.Messages;
 import com.dh.auth.dto.AuthDtos.ErrorResponse;
 import com.dh.auth.dto.AuthDtos.SendPhoneOtpRequest;
 import com.dh.auth.dto.AuthDtos.VerifyPhoneOtpRequest;
@@ -21,9 +22,11 @@ import jakarta.validation.Valid;
 public class PhoneController {
 
     private final PhoneVerificationService phoneVerificationService;
+    private final Messages messages;
 
-    public PhoneController(PhoneVerificationService phoneVerificationService) {
+    public PhoneController(PhoneVerificationService phoneVerificationService, Messages messages) {
         this.phoneVerificationService = phoneVerificationService;
+        this.messages = messages;
     }
 
     @PostMapping("/api/auth/phone/send-otp")
@@ -31,7 +34,8 @@ public class PhoneController {
         try {
             phoneVerificationService.sendOtp(request.phoneNumber());
         } catch (OtpCooldownException e) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new ErrorResponse(e.getMessage()));
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(new ErrorResponse(messages.get(e.getMessageKey(), e.getMessageArgs())));
         }
         return ResponseEntity.ok().build();
     }
@@ -41,7 +45,8 @@ public class PhoneController {
         try {
             phoneVerificationService.verifyOtp(request.phoneNumber(), request.code());
         } catch (OtpVerificationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse(messages.get(e.getMessageKey())));
         }
         return ResponseEntity.ok().build();
     }
