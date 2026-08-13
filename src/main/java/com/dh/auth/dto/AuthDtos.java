@@ -12,7 +12,9 @@ public class AuthDtos {
             @NotBlank(message = "이름을 입력하세요.") String name,
             @NotBlank(message = "휴대폰 번호를 입력하세요.")
             @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "올바른 휴대폰 번호 형식이 아닙니다.")
-            String phoneNumber) {
+            String phoneNumber,
+            /** 마케팅 정보 수신 동의(선택). 누락되면 동의하지 않은 것으로 본다. */
+            Boolean marketingOptIn) {
     }
 
     public record SendPhoneOtpRequest(

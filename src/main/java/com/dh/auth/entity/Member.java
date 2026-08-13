@@ -39,6 +39,19 @@ public class Member {
     @Column(name = "current_phone_number", length = 20)
     private String currentPhoneNumber;
 
+    /**
+     * 마케팅 정보 수신 동의 여부(선택 동의). 동의/철회 시각을 같이 남기는 건
+     * 정보통신망법상 동의 사실을 입증할 수 있어야 하기 때문이다.
+     */
+    @Column(name = "marketing_opt_in", nullable = false)
+    private boolean marketingOptIn;
+
+    @Column(name = "marketing_opt_in_at")
+    private LocalDateTime marketingOptInAt;
+
+    @Column(name = "marketing_opt_out_at")
+    private LocalDateTime marketingOptOutAt;
+
     protected Member() {
     }
 
@@ -54,6 +67,22 @@ public class Member {
 
     public void changePhoneNumber(String phoneNumber) {
         this.currentPhoneNumber = phoneNumber;
+    }
+
+    /**
+     * 수신 동의를 변경한다. 같은 값으로 다시 호출해도 시각을 덮어쓰지 않는다 —
+     * 동의/철회 시각은 "언제 그 상태가 됐는지"를 뜻해야 하므로.
+     */
+    public void changeMarketingOptIn(boolean optIn) {
+        if (this.marketingOptIn == optIn) {
+            return;
+        }
+        this.marketingOptIn = optIn;
+        if (optIn) {
+            this.marketingOptInAt = LocalDateTime.now();
+        } else {
+            this.marketingOptOutAt = LocalDateTime.now();
+        }
     }
 
     public Long getId() {
@@ -74,5 +103,17 @@ public class Member {
 
     public String getCurrentPhoneNumber() {
         return currentPhoneNumber;
+    }
+
+    public boolean isMarketingOptIn() {
+        return marketingOptIn;
+    }
+
+    public LocalDateTime getMarketingOptInAt() {
+        return marketingOptInAt;
+    }
+
+    public LocalDateTime getMarketingOptOutAt() {
+        return marketingOptOutAt;
     }
 }

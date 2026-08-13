@@ -79,7 +79,8 @@ public class AuthController {
         }
 
         KeycloakClient.UserInfo createdUser = keycloakClient.findUser(request.email());
-        memberService.createMemberForSignup(createdUser.id(), request.phoneNumber());
+        memberService.createMemberForSignup(
+                createdUser.id(), request.phoneNumber(), Boolean.TRUE.equals(request.marketingOptIn()));
 
         KeycloakClient.VerificationToken verification = keycloakClient.issueVerificationToken(request.email());
         emailVerificationService.sendVerificationEmail(request.email(), request.name(), verification.token());

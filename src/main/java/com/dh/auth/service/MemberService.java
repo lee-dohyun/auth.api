@@ -30,14 +30,18 @@ public class MemberService {
         this.phoneVerificationService = phoneVerificationService;
     }
 
-    /** 회원가입 완료 시 호출 — 기본 등급을 부여한 Member를 만들고, 방금 인증한 전화번호를 연결한다. */
+    /**
+     * 회원가입 완료 시 호출 — 기본 등급을 부여한 Member를 만들고, 방금 인증한 전화번호를 연결하고,
+     * 선택 동의인 마케팅 수신 동의 여부를 기록한다.
+     */
     @Transactional
-    public Member createMemberForSignup(String keycloakUserId, String phoneNumber) {
+    public Member createMemberForSignup(String keycloakUserId, String phoneNumber, boolean marketingOptIn) {
         MemberGrade defaultGrade = memberGradeRepository.findByIsDefaultTrue()
                 .orElseThrow(() -> new IllegalStateException("기본 등급이 설정되어 있지 않습니다."));
 
         Member member = new Member(keycloakUserId, defaultGrade);
         member.changePhoneNumber(phoneNumber.replace("-", ""));
+        member.changeMarketingOptIn(marketingOptIn);
         memberRepository.save(member);
         memberGradeHistoryRepository.save(new MemberGradeHistory(member, defaultGrade, "회원가입 기본 등급 부여"));
         phoneVerificationService.linkVerificationToMember(phoneNumber, member);
