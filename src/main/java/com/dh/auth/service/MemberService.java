@@ -9,6 +9,7 @@ import com.dh.auth.entity.MemberGradeHistory;
 import com.dh.auth.repository.MemberGradeHistoryRepository;
 import com.dh.auth.repository.MemberGradeRepository;
 import com.dh.auth.repository.MemberRepository;
+import com.dh.auth.support.PhoneNumbers;
 
 /** Keycloak 가입 완료 후 로컬 도메인 데이터(등급, 전화번호 연결)를 이어붙이는 서비스. */
 @Service
@@ -40,7 +41,9 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalStateException("기본 등급이 설정되어 있지 않습니다."));
 
         Member member = new Member(keycloakUserId, defaultGrade);
-        member.changePhoneNumber(phoneNumber.replace("-", ""));
+        // PhoneVerificationService와 같은 정규형(E.164)을 써야 한다 — 여기서만 다르게 정규화하면
+        // members.current_phone_number와 인증 이력이 서로 다른 표기로 갈라진다.
+        member.changePhoneNumber(PhoneNumbers.requireE164(phoneNumber));
         member.changeMarketingOptIn(marketingOptIn);
         memberRepository.save(member);
         memberGradeHistoryRepository.save(new MemberGradeHistory(member, defaultGrade, "회원가입 기본 등급 부여"));

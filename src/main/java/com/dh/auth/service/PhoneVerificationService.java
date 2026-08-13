@@ -13,6 +13,7 @@ import com.dh.auth.entity.PhoneOtpAttempt;
 import com.dh.auth.entity.PhoneVerification;
 import com.dh.auth.repository.PhoneOtpAttemptRepository;
 import com.dh.auth.repository.PhoneVerificationRepository;
+import com.dh.auth.support.PhoneNumbers;
 
 /**
  * 휴대폰 OTP 발송/검증. 실제 SMS 발급자가 아직 없어 mock으로 동작한다 — payment(mock, 항상 성공)와
@@ -133,8 +134,12 @@ public class PhoneVerificationService {
                 .ifPresent(v -> v.linkMember(member));
     }
 
+    /**
+     * 저장/조회 키는 항상 E.164 정규형이다. 하이픈만 떼던 예전 방식은 국가번호 개념이 없어서
+     * 같은 번호가 표기에 따라 다른 값으로 쌓일 수 있었다 — {@link PhoneNumbers} 참고.
+     */
     private String normalize(String phoneNumber) {
-        return phoneNumber.replace("-", "");
+        return PhoneNumbers.requireE164(phoneNumber);
     }
 
     private String generateCode() {
