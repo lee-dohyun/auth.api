@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/agreements")
+@RequestMapping("/api/auth/agreements")
 public class AgreementController {
 
     private final AgreementService agreementService;
