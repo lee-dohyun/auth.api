@@ -75,15 +75,28 @@ public class AuthController {
 
         boolean alreadyExists = keycloakClient.createUser(request.email(), request.name(), request.password());
         if (alreadyExists) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            KeycloakClient.UserInfo existingUser = keycloakClient.findUser(request.email());
+            if (!memberService.existsByKeycloakUserId(existingUser.id())) {
+                log.warn("로컬 DB에 연동되지 않은 Keycloak 좀비 유저를 삭제하고 재가입을 시도합니다. email={}", request.email());
+                keycloakClient.deleteUser(request.email());
+                keycloakClient.createUser(request.email(), request.name(), request.password());
+            } else {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
         }
 
         KeycloakClient.UserInfo createdUser = keycloakClient.findUser(request.email());
-        memberService.createMemberForSignup(
-                createdUser.id(), request.phoneNumber(), Boolean.TRUE.equals(request.marketingOptIn()));
+        try {
+            memberService.createMemberForSignup(
+                    createdUser.id(), request.phoneNumber(), Boolean.TRUE.equals(request.marketingOptIn()));
 
-        KeycloakClient.VerificationToken verification = keycloakClient.issueVerificationToken(request.email());
-        emailVerificationService.sendVerificationEmail(request.email(), request.name(), verification.token());
+            KeycloakClient.VerificationToken verification = keycloakClient.issueVerificationToken(request.email());
+            emailVerificationService.sendVerificationEmail(request.email(), request.name(), verification.token());
+        } catch (Exception e) {
+            log.error("로컬 도메인 가입 처리 중 오류 발생. Keycloak 유저를 롤백(삭제)합니다. email={}", request.email(), e);
+            keycloakClient.deleteUser(request.email());
+            throw e;
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }

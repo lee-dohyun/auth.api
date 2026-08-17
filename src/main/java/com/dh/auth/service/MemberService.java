@@ -51,4 +51,9 @@ public class MemberService {
 
         return member;
     }
+
+    @Transactional(readOnly = true)
+    public boolean existsByKeycloakUserId(String keycloakUserId) {
+        return memberRepository.findByKeycloakUserId(keycloakUserId).isPresent();
+    }
 }
