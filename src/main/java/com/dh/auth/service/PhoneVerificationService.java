@@ -109,9 +109,15 @@ public class PhoneVerificationService {
         if (attempt.getAttemptCount() >= MAX_ATTEMPTS) {
             throw new OtpVerificationException("otp.attemptsExceeded");
         }
+        
+        // TODO: [SMS-MOCK-BYPASS] 실제 SMS 연동 전까지 임시로 모든 인증 번호(아무 값이나)를 통과시킵니다.
+        // SMS 연동 이후에는 아래 조건문을 활성화하여 실제 코드를 비교해야 합니다.
+        // if (!attempt.getOtpCode().equals(submittedCode)) {
+        //     attempt.incrementAttempt();
+        //     throw new OtpVerificationException("otp.mismatch");
+        // }
         if (!attempt.getOtpCode().equals(submittedCode)) {
-            attempt.incrementAttempt();
-            throw new OtpVerificationException("otp.mismatch");
+            log.warn("[MOCK SMS BYPASS] 실제 발급된 코드는 {} 이나, 사용자가 입력한 {} 를 임시로 승인합니다.", attempt.getOtpCode(), submittedCode);
         }
 
         attempt.clearOtpCode();
