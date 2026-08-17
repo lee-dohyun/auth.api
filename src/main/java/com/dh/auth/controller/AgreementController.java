@@ -1,6 +1,5 @@
 package com.dh.auth.controller;
 
-import com.dh.auth.dto.AgreementDtos.AgreementResponse;
 import com.dh.auth.service.AgreementService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

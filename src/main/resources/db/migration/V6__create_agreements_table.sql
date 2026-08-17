@@ -1,11 +1,11 @@
 CREATE TABLE agreements (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     type VARCHAR(50) NOT NULL UNIQUE,
     title VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE agreement_articles (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     agreement_id BIGINT NOT NULL REFERENCES agreements(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     body TEXT NOT NULL,
