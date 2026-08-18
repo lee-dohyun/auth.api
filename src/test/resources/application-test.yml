@@ -11,3 +11,9 @@ spring:
 
   flyway:
     enabled: false
+
+sms:
+  provider: mock
+  api-key: test-key
+  api-secret: test-secret
+  from-number: 01012345678
