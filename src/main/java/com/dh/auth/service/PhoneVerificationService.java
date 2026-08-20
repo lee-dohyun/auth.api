@@ -17,10 +17,15 @@ import com.dh.auth.service.sms.SmsProvider;
 import com.dh.auth.support.PhoneNumbers;
 
 /**
- * 휴대폰 OTP 발송/검증. {@link SmsProvider}가 실제 벤더 자격증명 없이 설정된 환경(스테이징 등)에서는
- * 문자가 발송되지 않으므로 코드 불일치를 예외 없이 통과시킨다({@code SMS_API_KEY}/{@code SMS_API_SECRET}
- * 미설정 시 자동 활성화) — 벤더 자격증명이 설정되면 이 바이패스는 자동으로 비활성화되고 정확한 코드
- * 일치를 요구한다. 관련: auth.api#11.
+ * 휴대폰 OTP 발송/검증. 실제로 SMS가 나가는지는 {@code sms.provider} 설정에 달려 있다 —
+ * {@code solapi}(기본값)이고 api-key/secret이 채워져 있을 때만
+ * {@link com.dh.auth.service.sms.SolapiSmsProvider#isConfigured()}가 true가 되어 실제 발송하고,
+ * {@code mock} 등 다른 값이거나 키가 비어 있으면 코드가 담긴 메시지를 로그로만 남긴다.
+ * <b>{@link SmsProvider#isConfigured()}가 false인 동안은 {@link #verifyOtp}가 코드 불일치를
+ * 예외 없이 통과시킨다</b>({@code SMS-MOCK-BYPASS} 로그) — 벤더 자격증명이 채워지면 이 바이패스는
+ * 자동으로 비활성화되고 정확한 코드 일치를 요구한다. 현재 {@code mock}으로 두는 곳은 테스트
+ * 프로파일({@code application-test.yml})뿐이지만, 운영에서 키가 비거나 잘못 설정되면 같은 바이패스가
+ * 그대로 열린다는 뜻이므로 배포 전 반드시 확인할 것. 관련: auth.api#11.
  */
 @Service
 public class PhoneVerificationService {
