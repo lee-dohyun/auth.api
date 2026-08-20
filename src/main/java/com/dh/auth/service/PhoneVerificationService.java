@@ -17,8 +17,10 @@ import com.dh.auth.service.sms.SmsProvider;
 import com.dh.auth.support.PhoneNumbers;
 
 /**
- * 휴대폰 OTP 발송/검증. 실제 SMS 발급자가 아직 없어 mock으로 동작한다 — payment(mock, 항상 성공)와
- * 동일한 패턴으로, 코드는 로그에만 출력하고 검증 로직 자체는 실제로 동작한다.
+ * 휴대폰 OTP 발송/검증. {@link SmsProvider}가 실제 벤더 자격증명 없이 설정된 환경(스테이징 등)에서는
+ * 문자가 발송되지 않으므로 코드 불일치를 예외 없이 통과시킨다({@code SMS_API_KEY}/{@code SMS_API_SECRET}
+ * 미설정 시 자동 활성화) — 벤더 자격증명이 설정되면 이 바이패스는 자동으로 비활성화되고 정확한 코드
+ * 일치를 요구한다. 관련: auth.api#11.
  */
 @Service
 public class PhoneVerificationService {
@@ -114,8 +116,11 @@ public class PhoneVerificationService {
             throw new OtpVerificationException("otp.attemptsExceeded");
         }
         if (!attempt.getOtpCode().equals(submittedCode)) {
-            attempt.incrementAttempt();
-            throw new OtpVerificationException("otp.mismatch");
+            if (smsProvider.isConfigured()) {
+                attempt.incrementAttempt();
+                throw new OtpVerificationException("otp.mismatch");
+            }
+            log.warn("[SMS-MOCK-BYPASS] SMS 벤더 자격증명 미설정 - 인증 코드 불일치를 무시하고 통과 처리합니다. phone={}", normalized);
         }
 
         attempt.clearOtpCode();

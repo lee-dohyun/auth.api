@@ -77,14 +77,31 @@ class PhoneVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("잘못된 인증 코드를 입력하면 예외가 발생하고 시도 횟수가 증가한다.")
-    void verifyOtp_MismatchCode() {
+    @DisplayName("SMS 벤더가 설정된 상태에서 잘못된 인증 코드를 입력하면 예외가 발생하고 시도 횟수가 증가한다.")
+    void verifyOtp_MismatchCode_WhenSmsConfigured() {
         // given
         PhoneOtpAttempt attempt = new PhoneOtpAttempt(TEST_PHONE, "123456", LocalDateTime.now().plusMinutes(5));
         when(otpAttemptRepository.findByPhoneNumber(TEST_PHONE)).thenReturn(Optional.of(attempt));
+        when(smsProvider.isConfigured()).thenReturn(true);
 
         // when & then
         assertThrows(OtpVerificationException.class, () -> phoneVerificationService.verifyOtp(TEST_PHONE, "000000"));
         assertThat(attempt.getAttemptCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("SMS 벤더가 설정되지 않은 상태에서는 인증 코드가 달라도 통과 처리된다.")
+    void verifyOtp_MismatchCode_WhenSmsNotConfigured_PassesAsBypass() {
+        // given
+        PhoneOtpAttempt attempt = new PhoneOtpAttempt(TEST_PHONE, "123456", LocalDateTime.now().plusMinutes(5));
+        when(otpAttemptRepository.findByPhoneNumber(TEST_PHONE)).thenReturn(Optional.of(attempt));
+        when(smsProvider.isConfigured()).thenReturn(false);
+
+        // when
+        phoneVerificationService.verifyOtp(TEST_PHONE, "000000");
+
+        // then
+        assertThat(attempt.getAttemptCount()).isEqualTo(0);
+        verify(verificationRepository).save(any());
     }
 }

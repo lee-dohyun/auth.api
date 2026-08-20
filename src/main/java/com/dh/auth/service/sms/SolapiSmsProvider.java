@@ -36,6 +36,11 @@ public class SolapiSmsProvider implements SmsProvider {
     }
 
     @Override
+    public boolean isConfigured() {
+        return messageService != null;
+    }
+
+    @Override
     public void sendSms(String to, String content) {
         if (!"solapi".equalsIgnoreCase(providerName)) {
             log.info("[MOCK SMS] {}로 메시지 발송: {}", to, content);
