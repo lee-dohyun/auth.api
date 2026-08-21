@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id 'jacoco'
 	id 'org.springframework.boot' version '3.5.3'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'org.asciidoctor.jvm.convert' version '3.3.2'
@@ -37,6 +38,9 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -44,6 +48,17 @@ dependencies {
 tasks.named('test') {
 	outputs.dir snippetsDir
 	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+// 커버리지 리포트는 확인용일 뿐, 임계치 미달로 빌드를 실패시키지 않는다(대부분 저장소가
+// 커버리지 0%에 가까운 상태에서 출발하므로 리포트만 남기고 게이트는 걸지 않기로 결정, auth.api#15).
+jacocoTestReport {
+	dependsOn test
+	reports {
+		xml.required = false
+		html.required = true
+	}
 }
 
 tasks.named('asciidoctor') {
