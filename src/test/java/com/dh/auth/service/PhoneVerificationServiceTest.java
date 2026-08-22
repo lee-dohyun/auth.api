@@ -3,6 +3,8 @@ package com.dh.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,6 +28,8 @@ import com.dh.auth.service.PhoneVerificationService.OtpCooldownException;
 import com.dh.auth.service.PhoneVerificationService.OtpVerificationException;
 import com.dh.auth.service.PhoneVerificationService.SmsNotConfiguredException;
 import com.dh.auth.service.sms.SmsProvider;
+import com.dh.auth.service.sms.SmsSendGuard;
+import com.dh.auth.service.sms.SmsSendGuard.PerNumberDailyLimitException;
 
 @ExtendWith(MockitoExtension.class)
 class PhoneVerificationServiceTest {
@@ -38,6 +42,9 @@ class PhoneVerificationServiceTest {
 
     @Mock
     private SmsProvider smsProvider;
+
+    @Mock
+    private SmsSendGuard smsSendGuard;
 
     @InjectMocks
     private PhoneVerificationService phoneVerificationService;
@@ -149,5 +156,33 @@ class PhoneVerificationServiceTest {
         // then
         verify(otpAttemptRepository).save(any());
         verify(smsProvider).sendSms(any(), any());
+    }
+
+    @Test
+    @DisplayName("발송 상한에 걸리면 SMS도 보내지 않고 인증 세션도 만들지 않는다")
+    void sendOtp_BlockedByGuard() {
+        // given
+        when(smsProvider.isConfigured()).thenReturn(true);
+        when(otpAttemptRepository.findByPhoneNumber(TEST_PHONE)).thenReturn(Optional.empty());
+        doThrow(new PerNumberDailyLimitException())
+                .when(smsSendGuard).checkAndRecord(eq(TEST_PHONE), any());
+
+        // when & then
+        assertThrows(PerNumberDailyLimitException.class, () -> phoneVerificationService.sendOtp(TEST_PHONE));
+        verify(otpAttemptRepository, never()).save(any());
+        verify(smsProvider, never()).sendSms(any(), any());
+    }
+
+    @Test
+    @DisplayName("쿨다운 중이면 상한 검사까지 가지 않는다 — 연타하는 정상 사용자에게 '일일 상한'을 보여주면 안내가 틀린다")
+    void sendOtp_CooldownIsJudgedBeforeGuard() {
+        // given
+        when(smsProvider.isConfigured()).thenReturn(true);
+        PhoneOtpAttempt existingAttempt = new PhoneOtpAttempt(TEST_PHONE, "123456", LocalDateTime.now().plusMinutes(5));
+        when(otpAttemptRepository.findByPhoneNumber(TEST_PHONE)).thenReturn(Optional.of(existingAttempt));
+
+        // when & then
+        assertThrows(OtpCooldownException.class, () -> phoneVerificationService.sendOtp(TEST_PHONE));
+        verify(smsSendGuard, never()).checkAndRecord(any(), any());
     }
 }

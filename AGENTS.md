@@ -132,6 +132,30 @@ self-hosted runner(`k3s-home`)가 `kubectl set image deployment/auth-api -n cust
 각각 등록해야 한다. 메커니즘과 사고 이력은 `gateway/CLAUDE.md`의 "Key implication for changes" 참고.
 이 저장소에는 이 점검을 자동화한 `.claude/agents/gateway-route-guard.md` 서브에이전트가 있다.
 
+## SMS 발송은 반드시 SmsSendGuard를 지난다
+
+`send-otp` 는 gateway `PUBLIC_EXACT_PATHS` 에 있는 **공개 엔드포인트**다. 여기 걸려 있던 유일한
+방어가 "같은 번호 60초 쿨다운"이었는데 그건 번호를 바꾸면 그만이라, 벤더 자격증명을 넣는 순간
+발송량에 사실상 상한이 없었다(auth.api#29).
+
+**새로 SMS를 보내는 코드를 추가하면 `SmsProvider.sendSms()` 를 직접 부르지 말고 반드시
+`SmsSendGuard.checkAndRecord()` 를 먼저 통과시킬 것.**
+
+### 상한을 어디서 거는가 (2026-08-22 결정)
+
+| 층 | 무엇 | 왜 |
+|---|---|---|
+| **충전 잔액** | 지출의 실질 상한 | 사용자가 총액으로 관리한다. **자동충전은 꺼진 상태를 유지해야 이 상한이 성립한다** |
+| **번호당 상한** | 평시 유일한 상시 차단 | 한 번호가 반복 남용하는 경로를 막는다 |
+| **발송량 메트릭** | 차단이 아닌 관측 | `sms.send.recorded` / `sms.send.blocked{reason}` — 급증은 Grafana 알림으로 본다 |
+| **전역 상한** | **평시 0(끔), 비상 브레이크** | 켜 두면 공격자가 전역 쿼터를 태워 **정상 가입자 전체를 막을 수 있다**(자기 자신을 향한 DoS) |
+
+**전역 상한을 평시 기본값으로 되살리지 말 것.** 값은 남아 있지만 의도적으로 꺼 둔 것이고,
+`SmsSendGuardTest.기본값은_번호당만_켜져_있다` 가 그 상태를 고정한다. 실제 공격이 관측됐을 때만
+재배포 없이 `SMS_GUARD_GLOBAL_BURST_LIMIT` 부터 넣어 조인다(창이 짧아 반응이 가장 빠르다).
+
+가드는 **벤더 위**에 있다. Solapi 를 다른 벤더로 교체해도(#30) 이 계층은 그대로다.
+
 ## 관련 서비스
 
 - [gateway](../gateway) — Keycloak JWKS로 JWT를 검증하고 `X-User-*` 헤더를 주입하는 단일 진입점.

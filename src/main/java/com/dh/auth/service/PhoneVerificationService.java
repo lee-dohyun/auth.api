@@ -14,6 +14,7 @@ import com.dh.auth.entity.PhoneVerification;
 import com.dh.auth.repository.PhoneOtpAttemptRepository;
 import com.dh.auth.repository.PhoneVerificationRepository;
 import com.dh.auth.service.sms.SmsProvider;
+import com.dh.auth.service.sms.SmsSendGuard;
 import com.dh.auth.support.PhoneNumbers;
 
 /**
@@ -50,15 +51,18 @@ public class PhoneVerificationService {
     private final PhoneOtpAttemptRepository otpAttemptRepository;
     private final PhoneVerificationRepository verificationRepository;
     private final SmsProvider smsProvider;
+    private final SmsSendGuard smsSendGuard;
     private final SecureRandom random = new SecureRandom();
 
     public PhoneVerificationService(
             PhoneOtpAttemptRepository otpAttemptRepository,
             PhoneVerificationRepository verificationRepository,
-            SmsProvider smsProvider) {
+            SmsProvider smsProvider,
+            SmsSendGuard smsSendGuard) {
         this.otpAttemptRepository = otpAttemptRepository;
         this.verificationRepository = verificationRepository;
         this.smsProvider = smsProvider;
+        this.smsSendGuard = smsSendGuard;
     }
 
     /**
@@ -125,12 +129,17 @@ public class PhoneVerificationService {
         String code = generateCode();
 
         PhoneOtpAttempt attempt = otpAttemptRepository.findByPhoneNumber(normalized).orElse(null);
+        if (attempt != null && Duration.between(attempt.getLastSentAt(), now).compareTo(RESEND_COOLDOWN) < 0) {
+            throw new OtpCooldownException(RESEND_COOLDOWN.toSeconds());
+        }
+
+        // 쿨다운 다음, 상태를 건드리기 전에 상한을 본다. 순서가 뒤집히면 재발송을 연타하는 정상
+        // 사용자에게 "일일 상한 초과"가 먼저 뜬다 — 60초 기다리라는 안내가 먼저 나가야 맞다.
+        smsSendGuard.checkAndRecord(normalized, now);
+
         if (attempt == null) {
             otpAttemptRepository.save(new PhoneOtpAttempt(normalized, code, now.plus(OTP_TTL)));
         } else {
-            if (Duration.between(attempt.getLastSentAt(), now).compareTo(RESEND_COOLDOWN) < 0) {
-                throw new OtpCooldownException(RESEND_COOLDOWN.toSeconds());
-            }
             attempt.resend(code, now.plus(OTP_TTL));
         }
 
