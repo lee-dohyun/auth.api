@@ -17,3 +17,8 @@ sms:
   api-key: test-key
   api-secret: test-secret
   from-number: 01012345678
+
+# 테스트 컨텍스트에서 월배치 스케줄러가 뜨면 order.api 를 부르려 한다.
+member-grade:
+  scheduler:
+    enabled: false

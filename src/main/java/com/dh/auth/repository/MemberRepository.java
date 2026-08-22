@@ -9,4 +9,5 @@ import com.dh.auth.entity.Member;
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
     Optional<Member> findByKeycloakUserId(String keycloakUserId);
+
 }
