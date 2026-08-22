@@ -14,6 +14,7 @@ import com.dh.auth.dto.AuthDtos.VerifyPhoneOtpRequest;
 import com.dh.auth.service.PhoneVerificationService;
 import com.dh.auth.service.PhoneVerificationService.OtpCooldownException;
 import com.dh.auth.service.PhoneVerificationService.OtpVerificationException;
+import com.dh.auth.service.PhoneVerificationService.SmsNotConfiguredException;
 
 import jakarta.validation.Valid;
 
@@ -36,6 +37,10 @@ public class PhoneController {
         } catch (OtpCooldownException e) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body(new ErrorResponse(messages.get(e.getMessageKey(), e.getMessageArgs())));
+        } catch (SmsNotConfiguredException e) {
+            // 사용자 입력 문제가 아니라 우리 쪽 설정 문제라 503이다.
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new ErrorResponse(messages.get(e.getMessageKey())));
         }
         return ResponseEntity.ok().build();
     }

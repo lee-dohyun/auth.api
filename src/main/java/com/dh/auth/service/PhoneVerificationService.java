@@ -17,15 +17,25 @@ import com.dh.auth.service.sms.SmsProvider;
 import com.dh.auth.support.PhoneNumbers;
 
 /**
- * 휴대폰 OTP 발송/검증. 실제로 SMS가 나가는지는 {@code sms.provider} 설정에 달려 있다 —
- * {@code solapi}(기본값)이고 api-key/secret이 채워져 있을 때만
- * {@link com.dh.auth.service.sms.SolapiSmsProvider#isConfigured()}가 true가 되어 실제 발송하고,
- * {@code mock} 등 다른 값이거나 키가 비어 있으면 코드가 담긴 메시지를 로그로만 남긴다.
- * <b>{@link SmsProvider#isConfigured()}가 false인 동안은 {@link #verifyOtp}가 코드 불일치를
- * 예외 없이 통과시킨다</b>({@code SMS-MOCK-BYPASS} 로그) — 벤더 자격증명이 채워지면 이 바이패스는
- * 자동으로 비활성화되고 정확한 코드 일치를 요구한다. 현재 {@code mock}으로 두는 곳은 테스트
- * 프로파일({@code application-test.yml})뿐이지만, 운영에서 키가 비거나 잘못 설정되면 같은 바이패스가
- * 그대로 열린다는 뜻이므로 배포 전 반드시 확인할 것. 관련: auth.api#11.
+ * 휴대폰 OTP 발송/검증.
+ *
+ * <p><b>인증 코드는 어떤 경우에도 불일치가 통과하지 않는다.</b> 예전에는
+ * {@link SmsProvider#isConfigured()}가 false인 동안 코드 불일치를 그냥 통과시켰고
+ * ({@code SMS-MOCK-BYPASS} 로그), 운영 클러스터에 {@code SMS_API_KEY} 가 등록된 적이 없어서
+ * <b>실제로 아무 숫자나 넣어도 본인인증이 통과되고 있었다</b>(auth.api#11).
+ *
+ * <p>문제의 뿌리는 boolean 하나에 두 상태를 뭉갠 것이었다. 이제 둘을 나눠서 다룬다:
+ *
+ * <ul>
+ *   <li><b>mock 모드</b>({@code sms.provider} 가 {@code solapi} 가 아님) — 개발/테스트 의도다.
+ *       문자는 안 나가지만 코드가 로그에 찍히므로({@code [MOCK SMS]}) 그걸 넣어 정상 흐름을 그대로
+ *       탈 수 있다. 검증은 여전히 정확한 일치를 요구한다.</li>
+ *   <li><b>오설정</b>({@code solapi} 인데 자격증명이 빔) — 운영 사고다. 코드를 보낼 방법이 없으므로
+ *       {@link #sendOtp} 단계에서 {@link SmsNotConfiguredException} 으로 <b>흐름을 막는다.</b>
+ *       사용자에게 "지금 인증을 할 수 없다"고 말하는 것이, 받지도 않은 코드를 통과시키는 것보다 낫다.</li>
+ * </ul>
+ *
+ * 관련: auth.api#11, #13(벤더 연동), #14(바이패스 제거).
  */
 @Service
 public class PhoneVerificationService {
@@ -85,8 +95,31 @@ public class PhoneVerificationService {
         }
     }
 
+    /**
+     * SMS 벤더가 설정되지 않아 인증번호를 보낼 수 없는 상태. 운영 오설정이므로 503으로 나간다 —
+     * 사용자 입력이 잘못된 게 아니라 우리 쪽이 준비가 안 된 것이다.
+     */
+    public static class SmsNotConfiguredException extends RuntimeException {
+
+        public SmsNotConfiguredException() {
+            super("otp.serviceUnavailable");
+        }
+
+        public String getMessageKey() {
+            return "otp.serviceUnavailable";
+        }
+    }
+
     @Transactional
     public void sendOtp(String phoneNumber) {
+        // 보낼 수 없으면 시작도 하지 않는다. 여기서 막지 않으면 사용자는 오지 않는 문자를 기다리게 되고,
+        // 예전에는 그 상태에서 아무 코드나 넣으면 통과까지 됐다(auth.api#11).
+        if (!smsProvider.isConfigured() && !smsProvider.isMockMode()) {
+            log.error("SMS 벤더 자격증명이 설정되지 않아 OTP 발송을 거부합니다. "
+                    + "SMS_API_KEY / SMS_API_SECRET / SMS_FROM_NUMBER 를 확인하세요.");
+            throw new SmsNotConfiguredException();
+        }
+
         String normalized = normalize(phoneNumber);
         LocalDateTime now = LocalDateTime.now();
         String code = generateCode();
@@ -120,12 +153,11 @@ public class PhoneVerificationService {
         if (attempt.getAttemptCount() >= MAX_ATTEMPTS) {
             throw new OtpVerificationException("otp.attemptsExceeded");
         }
+        // 벤더 설정 여부와 무관하게 정확한 일치를 요구한다. mock 모드에서도 코드는 로그에 찍히므로
+        // 개발 흐름은 그대로 돌아간다.
         if (!attempt.getOtpCode().equals(submittedCode)) {
-            if (smsProvider.isConfigured()) {
-                attempt.incrementAttempt();
-                throw new OtpVerificationException("otp.mismatch");
-            }
-            log.warn("[SMS-MOCK-BYPASS] SMS 벤더 자격증명 미설정 - 인증 코드 불일치를 무시하고 통과 처리합니다. phone={}", normalized);
+            attempt.incrementAttempt();
+            throw new OtpVerificationException("otp.mismatch");
         }
 
         attempt.clearOtpCode();
