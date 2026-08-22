@@ -69,13 +69,18 @@ sms:
   api-secret: ${SMS_API_SECRET:}
   from-number: ${SMS_FROM_NUMBER:}
 
-  # 발송 상한(auth.api#29). 기능 설정이 아니라 지출 상한이라 전부 env 로 뺀다 —
-  # 공격이든 오작동이든 조여야 할 때 재배포를 기다릴 수 없다. 0 이하로 두면 해당 검사가 꺼진다.
-  # 근거: 단문 SMS 18원(VAT 별도) 기준 global-daily-limit=300 이면 하루 최대 약 5,940원.
+  # 발송 상한(auth.api#29). 전부 env 로 뺀다 — 조여야 할 때 재배포를 기다릴 수 없다.
+  # 0 이하면 해당 검사가 꺼진다.
+  #
+  # 평시 상시 제한은 "번호당" 하나뿐이다(2026-08-22 사용자 결정). 전역 하드 캡은 지출을 묶는
+  # 대신 자기 자신을 향한 DoS 가 된다 — 공격자가 전역 쿼터를 태우면 정상 가입자 전체가 막힌다.
+  # 전역 값은 지우지 않고 비상 브레이크로 0(끔) 상태로 둔다. 공격이 관측되면 재배포 없이
+  # SMS_GUARD_GLOBAL_BURST_LIMIT 부터 넣어 조인다(창이 짧아 반응이 가장 빠르다).
+  # 평시 전역 방어는 차단이 아니라 관측이다 — sms.send.recorded 메트릭 + Grafana 알림.
   guard:
     per-number-daily-limit: ${SMS_GUARD_PER_NUMBER_DAILY_LIMIT:5}
-    global-daily-limit: ${SMS_GUARD_GLOBAL_DAILY_LIMIT:300}
-    global-burst-limit: ${SMS_GUARD_GLOBAL_BURST_LIMIT:30}
+    global-daily-limit: ${SMS_GUARD_GLOBAL_DAILY_LIMIT:0}
+    global-burst-limit: ${SMS_GUARD_GLOBAL_BURST_LIMIT:0}
     daily-window: ${SMS_GUARD_DAILY_WINDOW:24h}
     burst-window: ${SMS_GUARD_BURST_WINDOW:10m}
     retention: ${SMS_GUARD_RETENTION:7d}

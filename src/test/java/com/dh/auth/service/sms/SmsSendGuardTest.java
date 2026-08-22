@@ -155,4 +155,16 @@ class SmsSendGuardTest {
         verify(sendLogRepository, never()).countByPhoneNumberAndSentAtAfter(any(), any());
         verify(sendLogRepository, never()).countBySentAtAfter(any());
     }
+
+    @Test
+    @DisplayName("기본값은 번호당 상한만 켜져 있다 — 전역 하드 캡은 자기 자신을 향한 DoS 라 평시엔 끈다")
+    void 기본값은_번호당만_켜져_있다() {
+        SmsGuardProperties defaults = new SmsGuardProperties();
+
+        assertThat(defaults.getPerNumberDailyLimit()).isPositive();
+        // 전역 값이 켜져 있으면 공격자가 쿼터를 태워 정상 가입자 전체를 막을 수 있다.
+        // 지출 상한은 애플리케이션이 아니라 "충전 잔액"으로 관리한다(2026-08-22 사용자 결정).
+        assertThat(defaults.getGlobalDailyLimit()).isNotPositive();
+        assertThat(defaults.getGlobalBurstLimit()).isNotPositive();
+    }
 }
