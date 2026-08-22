@@ -132,6 +132,21 @@ self-hosted runner(`k3s-home`)가 `kubectl set image deployment/auth-api -n cust
 각각 등록해야 한다. 메커니즘과 사고 이력은 `gateway/CLAUDE.md`의 "Key implication for changes" 참고.
 이 저장소에는 이 점검을 자동화한 `.claude/agents/gateway-route-guard.md` 서브에이전트가 있다.
 
+## SMS 발송은 반드시 SmsSendGuard를 지난다
+
+`send-otp` 는 gateway `PUBLIC_EXACT_PATHS` 에 있는 **공개 엔드포인트**다. 여기 걸려 있던 유일한
+방어가 "같은 번호 60초 쿨다운"이었는데 그건 번호를 바꾸면 그만이라, 벤더 자격증명을 넣는 순간
+발송량에 사실상 상한이 없었다(auth.api#29).
+
+**새로 SMS를 보내는 코드를 추가하면 `SmsProvider.sendSms()` 를 직접 부르지 말고 반드시
+`SmsSendGuard.checkAndRecord()` 를 먼저 통과시킬 것.** 이건 기능 제약이 아니라 지출 상한이다 —
+상한이 빠졌다는 사실은 테스트가 아니라 청구서로만 드러난다.
+
+- 임계값은 `sms.guard.*`(env `SMS_GUARD_*`)로 전부 뺐다. 조여야 할 때 재배포를 기다리지 않기 위해서다.
+- 가드는 **벤더 위**에 있다. Solapi 를 다른 벤더로 교체해도(#30) 이 계층은 그대로다.
+- 차단은 메트릭(`sms.send.blocked{reason}`)과 ERROR 로그 양쪽에 남는다. `global_*` 이유로 막혔다면
+  공격이거나 우리 쪽 오작동이므로 확인 대상이다.
+
 ## 관련 서비스
 
 - [gateway](../gateway) — Keycloak JWKS로 JWT를 검증하고 `X-User-*` 헤더를 주입하는 단일 진입점.

@@ -68,3 +68,14 @@ sms:
   api-key: ${SMS_API_KEY:}
   api-secret: ${SMS_API_SECRET:}
   from-number: ${SMS_FROM_NUMBER:}
+
+  # 발송 상한(auth.api#29). 기능 설정이 아니라 지출 상한이라 전부 env 로 뺀다 —
+  # 공격이든 오작동이든 조여야 할 때 재배포를 기다릴 수 없다. 0 이하로 두면 해당 검사가 꺼진다.
+  # 근거: 단문 SMS 18원(VAT 별도) 기준 global-daily-limit=300 이면 하루 최대 약 5,940원.
+  guard:
+    per-number-daily-limit: ${SMS_GUARD_PER_NUMBER_DAILY_LIMIT:5}
+    global-daily-limit: ${SMS_GUARD_GLOBAL_DAILY_LIMIT:300}
+    global-burst-limit: ${SMS_GUARD_GLOBAL_BURST_LIMIT:30}
+    daily-window: ${SMS_GUARD_DAILY_WINDOW:24h}
+    burst-window: ${SMS_GUARD_BURST_WINDOW:10m}
+    retention: ${SMS_GUARD_RETENTION:7d}
