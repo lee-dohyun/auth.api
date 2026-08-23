@@ -1,6 +1,16 @@
 package com.dh.auth.service.sms;
 
 public interface SmsProvider {
+
+    /**
+     * 벤더 공통 규약: 실패는 예외로만 알린다. 발송 성공/실패를 boolean 이나 응답 코드로
+     * 흘려보내지 말 것 — 접수(202/2000)와 전달을 같은 것으로 다뤄서 실패가 조용해지는 사고가
+     * 있었다(auth.api#34). E.164 → 벤더별 번호 포맷 변환은 각 구현이 담당한다.
+     *
+     * @throws SmsSendFailedException 벤더 호출 자체가 실패했거나(네트워크/인증 등) 벤더가
+     *     설정되지 않은 상태에서 호출된 경우. 호출 전에 {@link #isConfigured()} /
+     *     {@link #isMockMode()} 로 먼저 걸러야 정상 흐름에서는 도달하지 않는다.
+     */
     void sendSms(String to, String content);
 
     /** 실제 벤더 자격증명이 설정되어 문자가 실제로 발송되는지 여부. */
