@@ -248,7 +248,20 @@ public class AuthController {
         if (email == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        keycloakClient.deleteUser(email);
+
+        try {
+            KeycloakClient.UserInfo user = keycloakClient.findUser(email);
+            memberService.withdrawMember(user.id());
+        } catch (Exception e) {
+            log.warn("로컬 회원 탈퇴 상태 업데이트 중 오류 발생: email={}", email, e);
+        }
+
+        try {
+            keycloakClient.deleteUser(email);
+        } catch (Exception e) {
+            log.warn("Keycloak 사용자 삭제 중 오류 발생: email={}", email, e);
+        }
+
         return ResponseEntity.ok()
                 .header("Set-Cookie", clearedCookie(ACCESS_TOKEN_COOKIE, "/").toString())
                 .header("Set-Cookie", clearedCookie(REFRESH_TOKEN_COOKIE, REFRESH_TOKEN_PATH).toString())

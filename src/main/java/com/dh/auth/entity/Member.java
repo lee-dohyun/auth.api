@@ -52,6 +52,9 @@ public class Member {
     @Column(name = "marketing_opt_out_at")
     private LocalDateTime marketingOptOutAt;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
     protected Member() {
     }
 
@@ -115,5 +118,13 @@ public class Member {
 
     public LocalDateTime getMarketingOptOutAt() {
         return marketingOptOutAt;
+    }
+
+    public void withdraw() {
+        this.withdrawnAt = LocalDateTime.now();
+    }
+
+    public LocalDateTime getWithdrawnAt() {
+        return withdrawnAt;
     }
 }

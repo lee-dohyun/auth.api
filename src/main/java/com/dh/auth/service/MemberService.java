@@ -56,4 +56,11 @@ public class MemberService {
     public boolean existsByKeycloakUserId(String keycloakUserId) {
         return memberRepository.findByKeycloakUserId(keycloakUserId).isPresent();
     }
+
+    @Transactional
+    public void withdrawMember(String keycloakUserId) {
+        Member member = memberRepository.findByKeycloakUserId(keycloakUserId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        member.withdraw();
+    }
 }
