@@ -114,7 +114,16 @@ public class PhoneVerificationService {
         }
     }
 
-    @Transactional
+    /**
+     * 일부러 {@code @Transactional}을 붙이지 않았다(auth.api#33). {@link SmsProvider#sendSms}는
+     * 원격 HTTP 호출이라 트랜잭션 안에 있으면 안 된다(캐논 §3 "트랜잭션 / 정합성").
+     *
+     * <p>쿨다운 판정·발송 상한 기록({@link SmsSendGuard#checkAndRecord})·OTP 세션 저장은 각자
+     * 자기 리포지토리 호출 시점에 개별 커밋된다 — 벤더 호출은 그 커밋들이 끝난 뒤에만 시작한다.
+     * 그래서 벤더 호출이 실패해도 이미 커밋된 쿨다운·상한 카운트·OTP 세션은 되돌아가지 않는다.
+     * {@link SmsSendGuard}의 설계 의도(발송 실패 시 과다 계상이, 성공했는데 못 세는 것보다 안전)와
+     * 같은 방향이다.
+     */
     public void sendOtp(String phoneNumber) {
         // 보낼 수 없으면 시작도 하지 않는다. 여기서 막지 않으면 사용자는 오지 않는 문자를 기다리게 되고,
         // 예전에는 그 상태에서 아무 코드나 넣으면 통과까지 됐다(auth.api#11).
@@ -135,15 +144,19 @@ public class PhoneVerificationService {
 
         // 쿨다운 다음, 상태를 건드리기 전에 상한을 본다. 순서가 뒤집히면 재발송을 연타하는 정상
         // 사용자에게 "일일 상한 초과"가 먼저 뜬다 — 60초 기다리라는 안내가 먼저 나가야 맞다.
+        // SmsSendGuard 는 자체 @Transactional(REQUIRED)이라 여기 트랜잭션이 없어도 자기 트랜잭션으로 커밋된다.
         smsSendGuard.checkAndRecord(normalized, now);
 
         if (attempt == null) {
             otpAttemptRepository.save(new PhoneOtpAttempt(normalized, code, now.plus(OTP_TTL)));
         } else {
+            // attempt는 위 findByPhoneNumber() 호출의 트랜잭션이 끝나며 이미 detach된 상태다.
+            // 같은 트랜잭션 안에서의 dirty checking을 더 이상 기대할 수 없으므로 명시적으로 save한다.
             attempt.resend(code, now.plus(OTP_TTL));
+            otpAttemptRepository.save(attempt);
         }
 
-        // 실제 SMS 발송
+        // 트랜잭션 밖 — 여기서 예외가 나도 위에서 이미 커밋된 쿨다운/상한/OTP 세션은 그대로 남는다.
         smsProvider.sendSms(normalized, "[POSSelect] 인증번호: " + code);
     }
 
