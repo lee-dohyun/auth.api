@@ -3,6 +3,7 @@ package com.dh.auth.service.sms;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -12,23 +13,25 @@ import net.nurigo.sdk.message.request.SingleMessageSendingRequest;
 import net.nurigo.sdk.message.response.SingleMessageSentResponse;
 import net.nurigo.sdk.message.service.DefaultMessageService;
 
+/**
+ * Solapi 벤더 구현. {@code sms.provider} 가 {@code solapi} 이거나 비어 있을 때만 등록된다.
+ * 자기 벤더 일만 한다 — mock 분기는 {@link MockSmsProvider} 로 옮겼다.
+ */
 @Component
+@ConditionalOnProperty(name = "sms.provider", havingValue = "solapi", matchIfMissing = true)
 public class SolapiSmsProvider implements SmsProvider {
 
     private static final Logger log = LoggerFactory.getLogger(SolapiSmsProvider.class);
     private final DefaultMessageService messageService;
     private final String fromNumber;
-    private final String providerName;
 
     public SolapiSmsProvider(
             @Value("${sms.api-key}") String apiKey,
             @Value("${sms.api-secret}") String apiSecret,
-            @Value("${sms.from-number}") String fromNumber,
-            @Value("${sms.provider:solapi}") String providerName) {
+            @Value("${sms.from-number}") String fromNumber) {
         this.fromNumber = fromNumber;
-        this.providerName = providerName;
-        
-        if ("solapi".equalsIgnoreCase(providerName) && StringUtils.hasText(apiKey) && StringUtils.hasText(apiSecret)) {
+
+        if (StringUtils.hasText(apiKey) && StringUtils.hasText(apiSecret)) {
             this.messageService = NurigoApp.INSTANCE.initialize(apiKey, apiSecret, "https://api.solapi.com");
         } else {
             this.messageService = null;
@@ -42,19 +45,16 @@ public class SolapiSmsProvider implements SmsProvider {
 
     @Override
     public boolean isMockMode() {
-        return !"solapi".equalsIgnoreCase(providerName);
+        return false;
     }
 
     @Override
     public void sendSms(String to, String content) {
-        if (!"solapi".equalsIgnoreCase(providerName)) {
-            log.info("[MOCK SMS] {}로 메시지 발송: {}", to, content);
-            return;
-        }
-        
         if (messageService == null) {
-            log.warn("Solapi SMS 설정이 올바르지 않습니다. 발송을 건너뜁니다.");
-            return;
+            // 정상 흐름에서는 PhoneVerificationService 가 isConfigured()==false 를 먼저 보고
+            // sendOtp() 단계에서 막는다. 여기 도달했다면 그 방어를 우회한 호출이므로
+            // 조용히 넘기지 않고 인터페이스 계약대로 실패를 알린다.
+            throw new SmsSendFailedException("Solapi 자격증명이 설정되지 않았습니다.");
         }
 
         Message message = new Message();

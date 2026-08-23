@@ -88,9 +88,13 @@ self-hosted runner(`k3s-home`)가 `kubectl set image deployment/auth-api -n cust
   최대 5회 시도, 가입에 쓸 수 있는 인증 유효창 30분. 저장 형식은 **E.164 정규형**으로 고정
   (`support/PhoneNumbers`, libphonenumber; 입력 검증은 `@ValidPhoneNumber`). 표기가 갈라지면 UNIQUE 제약과
   인증 이력 조회가 동시에 샌다 — 정규화를 우회하는 경로를 만들지 말 것.
-- **SMS** (`service/sms`): `SmsProvider` 인터페이스 + `SolapiSmsProvider`(net.nurigo SDK). `sms.provider`가
-  `solapi`이고 키가 있을 때만 실제 발송하고, 그 외(`mock` 등)에는 발송하지 않는다. 국내/해외 듀얼 라우팅
-  사업자 선정은 아직 미결이라 이 인터페이스가 교체 지점이다.
+- **SMS** (`service/sms`): `SmsProvider` 인터페이스 + `SolapiSmsProvider`(net.nurigo SDK) / `MockSmsProvider`.
+  구현체는 `@ConditionalOnProperty(name = "sms.provider", havingValue = ...)`로 각자 자기 값일 때만 빈으로
+  등록되므로 컨텍스트엔 항상 `SmsProvider` 빈이 정확히 하나다(`solapi`는 `matchIfMissing = true`로 기본값).
+  **새 벤더 추가 절차**: ①`XxxSmsProvider implements SmsProvider`를 만들고 `@ConditionalOnProperty(havingValue = "xxx")`를
+  붙인다 ②발송 실패는 `SmsSendFailedException`으로만 알리고(boolean/응답코드로 흘리지 말 것 — auth.api#34),
+  미설정이면 `isConfigured()=false`, mock 의도면 `isMockMode()=true` ③E.164 → 벤더 번호 포맷 변환은 구현
+  내부에서 처리 ④기존 벤더 클래스에 이름 분기를 추가하지 말 것 — 각자 자기 벤더 일만 한다(auth.api#30).
 - **회원 도메인**: `members`(=`keycloak_user_id` 유니크 앵커, 현재 등급, 현재 인증 전화번호, 마케팅 동의/시각),
   `member_grades`(등급 정책 마스터 — 등급을 코드에 하드코딩하지 말 것), `member_grade_history`,
   `member_addresses`(배송지 N개, 기본 배송지 플래그), `phone_verifications`(인증 이력) / `phone_otp_attempts`,
