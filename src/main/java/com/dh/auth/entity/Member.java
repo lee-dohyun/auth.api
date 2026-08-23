@@ -122,6 +122,8 @@ public class Member {
 
     public void withdraw() {
         this.withdrawnAt = LocalDateTime.now();
+        // 재가입 시 동일 전화번호로 가입할 수 있도록 UNIQUE 제약조건 충돌 방지 및 개인정보 보호
+        this.currentPhoneNumber = null;
     }
 
     public LocalDateTime getWithdrawnAt() {
