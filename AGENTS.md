@@ -95,6 +95,15 @@ self-hosted runner(`k3s-home`)가 `kubectl set image deployment/auth-api -n cust
   붙인다 ②발송 실패는 `SmsSendFailedException`으로만 알리고(boolean/응답코드로 흘리지 말 것 — auth.api#34),
   미설정이면 `isConfigured()=false`, mock 의도면 `isMockMode()=true` ③E.164 → 벤더 번호 포맷 변환은 구현
   내부에서 처리 ④기존 벤더 클래스에 이름 분기를 추가하지 말 것 — 각자 자기 벤더 일만 한다(auth.api#30).
+  **Solapi 발송 결과 확인**: `sendOne()`의 응답(2000)은 "접수"일 뿐 "전달"이 아니다 — 실제 통신사 결과는
+  비동기 리포트로 나중에 온다(auth.api#34, 발신번호 스팸차단으로 조용히 실패한 실사고). `SolapiSmsProvider`가
+  접수 성공 10초 뒤 `getMessageList()`로 한 번 지연 조회해 최종 상태(4000=COMPLETE 아니면 실패)를 확인하고,
+  실패면 `sms.send.failed{statusCode}` 카운터 + ERROR 로그(`[SMS-DELIVERY-FAILED]`)만 남긴다 — OTP 세션/쿨다운은
+  건드리지 않는다(사용자 경험 불변, 운영자만 즉시 인지하는 최소 조치). 아직 Grafana 알림 룰은 없다(가드의
+  `sms.send.blocked`와 같은 미해결 갭). Solapi 웹훅(실시간 콜백) 방식은 도입하지 않았다 — 공개 엔드포인트가
+  하나 늘고 서명 검증이 필요한데(gateway `PUBLIC_EXACT_PATHS`), 이 네트워크에서 Solapi 웹훅 공식 문서
+  (`docs.solapi.com`)에 접근이 안 돼 정확한 payload/서명 스펙을 확인할 수 없었다 — 확인 후 웹훅으로 갈아탈
+  가치가 있으면 별도 이슈로.
 - **회원 도메인**: `members`(=`keycloak_user_id` 유니크 앵커, 현재 등급, 현재 인증 전화번호, 마케팅 동의/시각),
   `member_grades`(등급 정책 마스터 — 등급을 코드에 하드코딩하지 말 것), `member_grade_history`,
   `member_addresses`(배송지 N개, 기본 배송지 플래그), `phone_verifications`(인증 이력) / `phone_otp_attempts`,
