@@ -72,6 +72,34 @@ class PhoneVerificationServiceTest {
         verify(smsProvider, times(1)).sendSms(TEST_PHONE, "[POSSelect] 인증번호: " + savedAttempt.getOtpCode());
     }
 
+    // ── auth.api#33 회귀 방지 ────────────────────────────────────────────────
+    // sendOtp()가 더 이상 @Transactional이 아니므로, 재발송 시 findByPhoneNumber()가 돌려준
+    // attempt는 이미 detach된 상태다. dirty checking을 더는 기대할 수 없으므로 resend() 뒤에
+    // 명시적 save()가 있어야 한다 — 이 목 검증은 그 호출 자체가 빠지지 않았는지만 잡아 준다.
+    // 실제로 트랜잭션 경계가 맞는지(커밋이 살아남는지)는 Mockito로 증명할 수 없어
+    // PhoneVerificationServiceIntegrationTest(실 Postgres)에서 별도로 검증한다.
+
+    @Test
+    @DisplayName("쿨다운이 지난 뒤 재발송하면 기존 세션을 갱신하고 명시적으로 저장한다")
+    void sendOtp_Resend_SavesUpdatedAttemptExplicitly() {
+        // given
+        when(smsProvider.isConfigured()).thenReturn(true);
+        PhoneOtpAttempt existingAttempt =
+                new PhoneOtpAttempt(TEST_PHONE, "111111", LocalDateTime.now().plusMinutes(5));
+        // lastSentAt은 생성자가 now()로 고정한다 — 쿨다운을 지난 상태를 만들려면 직접 되돌려야 한다.
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                existingAttempt, "lastSentAt", LocalDateTime.now().minusSeconds(61));
+        when(otpAttemptRepository.findByPhoneNumber(TEST_PHONE)).thenReturn(Optional.of(existingAttempt));
+
+        // when
+        phoneVerificationService.sendOtp(TEST_PHONE);
+
+        // then
+        verify(otpAttemptRepository).save(existingAttempt);
+        assertThat(existingAttempt.getAttemptCount()).isEqualTo(0);
+        verify(smsProvider).sendSms(eq(TEST_PHONE), any());
+    }
+
     @Test
     @DisplayName("쿨타임 이전에 다시 OTP를 요청하면 예외가 발생한다.")
     void sendOtp_BeforeCooldown() {
