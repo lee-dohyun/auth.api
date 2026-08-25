@@ -52,6 +52,19 @@ public class MemberService {
         return member;
     }
 
+    /** 소셜 로그인 최초 접속 시 로컬 도메인 데이터를 생성한다 (전화번호 없음). */
+    @Transactional
+    public Member createMemberForSocialLogin(String keycloakUserId) {
+        MemberGrade defaultGrade = memberGradeRepository.findByIsDefaultTrue()
+                .orElseThrow(() -> new IllegalStateException("기본 등급이 설정되어 있지 않습니다."));
+
+        Member member = new Member(keycloakUserId, defaultGrade);
+        memberRepository.save(member);
+        memberGradeHistoryRepository.save(new MemberGradeHistory(member, defaultGrade, "소셜 로그인 기본 등급 부여"));
+
+        return member;
+    }
+
     @Transactional(readOnly = true)
     public boolean existsByKeycloakUserId(String keycloakUserId) {
         return memberRepository.findByKeycloakUserId(keycloakUserId).isPresent();
