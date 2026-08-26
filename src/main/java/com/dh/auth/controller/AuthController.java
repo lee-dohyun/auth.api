@@ -130,7 +130,14 @@ public class AuthController {
     @GetMapping("/api/auth/callback")
     public ResponseEntity<?> callback(
             @org.springframework.web.bind.annotation.RequestParam("code") String code,
+            @org.springframework.web.bind.annotation.RequestParam("state") String state,
+            @CookieValue(value = "oauth_state", required = false) String stateCookie,
             jakarta.servlet.http.HttpServletRequest request) {
+
+        if (stateCookie == null || !stateCookie.equals(state)) {
+            log.warn("소셜 로그인 콜백 state 불일치 — CSRF 의심 또는 만료된 요청");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
 
         String scheme = request.getHeader("X-Forwarded-Proto") != null ? request.getHeader("X-Forwarded-Proto") : request.getScheme();
         String host = request.getHeader("X-Forwarded-Host") != null ? request.getHeader("X-Forwarded-Host") : request.getServerName();
@@ -174,11 +181,18 @@ public class AuthController {
                 .build();
 
         ResponseCookie refreshCookie = refreshCookie(token.refreshToken(), token.refreshExpiresInSeconds());
+        ResponseCookie clearedState = ResponseCookie.from("oauth_state", "")
+                .path("/")
+                .maxAge(0)
+                .sameSite("Lax")
+                .secure(true)
+                .build();
 
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header("Location", "/mypage")
                 .header("Set-Cookie", accessCookie.toString())
                 .header("Set-Cookie", refreshCookie.toString())
+                .header("Set-Cookie", clearedState.toString())
                 .build();
     }
 
