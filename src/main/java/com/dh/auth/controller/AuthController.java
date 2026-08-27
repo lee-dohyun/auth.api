@@ -127,6 +127,75 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/api/auth/callback")
+    public ResponseEntity<?> callback(
+            @org.springframework.web.bind.annotation.RequestParam("code") String code,
+            @org.springframework.web.bind.annotation.RequestParam("state") String state,
+            @CookieValue(value = "oauth_state", required = false) String stateCookie,
+            jakarta.servlet.http.HttpServletRequest request) {
+
+        if (stateCookie == null || !stateCookie.equals(state)) {
+            log.warn("소셜 로그인 콜백 state 불일치 — CSRF 의심 또는 만료된 요청");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+
+        String scheme = request.getHeader("X-Forwarded-Proto") != null ? request.getHeader("X-Forwarded-Proto") : request.getScheme();
+        String host = request.getHeader("X-Forwarded-Host") != null ? request.getHeader("X-Forwarded-Host") : request.getServerName();
+        String port = request.getHeader("X-Forwarded-Port");
+        if (port != null && !port.equals("80") && !port.equals("443")) {
+            host = host + ":" + port;
+        } else if (port == null && request.getServerPort() != 80 && request.getServerPort() != 443) {
+            host = host + ":" + request.getServerPort();
+        }
+
+        String redirectUri = scheme + "://" + host + "/api/auth/callback";
+
+        KeycloakClient.TokenResponse token;
+        try {
+            token = keycloakClient.authorizationCodeGrant(code, redirectUri);
+        } catch (HttpClientErrorException e) {
+            log.error("Failed to get token from Keycloak using code. Response: {}", e.getResponseBodyAsString(), e);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        // 액세스 토큰으로 사용자 정보 조회 후 로컬 Member 엔티티가 없으면 생성 (최초 로그인)
+        try {
+            KeycloakClient.UserInfo user = keycloakClient.userInfo(token.accessToken());
+            if (!memberService.existsByKeycloakUserId(user.id())) {
+                memberService.createMemberForSocialLogin(user.id());
+                log.info("소셜 로그인 신규 가입 - 고객번호={}, 이메일={}", user.id(), user.email());
+            }
+            log.info("소셜 로그인 성공 - 고객번호={}, 이메일={}, 고객명={}", user.id(), user.email(), user.name());
+        } catch (Exception e) {
+            log.error("소셜 로그인 사용자 동기화 실패", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+
+        ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE, token.accessToken())
+                .domain(cookieDomain)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(token.expiresInSeconds())
+                .sameSite("Lax")
+                .build();
+
+        ResponseCookie refreshCookie = refreshCookie(token.refreshToken(), token.refreshExpiresInSeconds());
+        ResponseCookie clearedState = ResponseCookie.from("oauth_state", "")
+                .path("/")
+                .maxAge(0)
+                .sameSite("Lax")
+                .secure(true)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header("Location", "/mypage")
+                .header("Set-Cookie", accessCookie.toString())
+                .header("Set-Cookie", refreshCookie.toString())
+                .header("Set-Cookie", clearedState.toString())
+                .build();
+    }
+
     @PostMapping("/api/auth/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         KeycloakClient.TokenResponse token;

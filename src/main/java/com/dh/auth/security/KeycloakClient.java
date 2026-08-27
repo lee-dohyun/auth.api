@@ -108,6 +108,42 @@ public class KeycloakClient {
                 refreshExpiresIn == null ? 0 : ((Number) refreshExpiresIn).longValue());
     }
 
+    /**
+     * 표준 OAuth2 인가 코드(Authorization Code) 흐름으로 토큰을 발급받는다. (간편 로그인 콜백용)
+     */
+    @SuppressWarnings("unchecked")
+    public TokenResponse authorizationCodeGrant(String code, String redirectUri) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("client_id", clientId);
+        form.add("client_secret", clientSecret);
+        form.add("code", code);
+        form.add("redirect_uri", redirectUri);
+
+        Map<String, Object> body = restClient.post()
+                .uri("/realms/{realm}/protocol/openid-connect/token", realm)
+                .body(form)
+                .retrieve()
+                .body(Map.class);
+
+        return toTokenResponse(body);
+    }
+
+    /** 액세스 토큰으로 Keycloak /userinfo 엔드포인트를 호출하여 정보를 가져온다. */
+    @SuppressWarnings("unchecked")
+    public UserInfo userInfo(String accessToken) {
+        Map<String, Object> info = restClient.get()
+                .uri("/realms/{realm}/protocol/openid-connect/userinfo", realm)
+                .header("Authorization", "Bearer " + accessToken)
+                .retrieve()
+                .body(Map.class);
+        return new UserInfo(
+                (String) info.get("sub"),
+                (String) info.get("email"),
+                (String) info.get("name"),
+                Boolean.TRUE.equals(info.get("email_verified")));
+    }
+
     /** auth-api-backend 서비스 계정(Client Credentials)으로 Admin API 호출용 토큰을 받는다. */
     @SuppressWarnings("unchecked")
     private String serviceAccountToken() {
