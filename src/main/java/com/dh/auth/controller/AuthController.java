@@ -33,6 +33,7 @@ import com.dh.auth.dto.AuthDtos.UpdateMeRequest;
 import com.dh.auth.dto.AuthDtos.VerifyEmailRequest;
 import com.dh.auth.security.KeycloakClient;
 import com.dh.auth.service.EmailVerificationService;
+import com.dh.auth.service.MemberPurgeService;
 import com.dh.auth.service.MemberService;
 import com.dh.auth.service.PhoneVerificationService;
 
@@ -52,17 +53,20 @@ public class AuthController {
     private final EmailVerificationService emailVerificationService;
     private final PhoneVerificationService phoneVerificationService;
     private final MemberService memberService;
+    private final MemberPurgeService memberPurgeService;
 
     public AuthController(
             KeycloakClient keycloakClient,
             EmailVerificationService emailVerificationService,
             PhoneVerificationService phoneVerificationService,
             MemberService memberService,
+            MemberPurgeService memberPurgeService,
             @Value("${app.cookie-domain}") String cookieDomain) {
         this.keycloakClient = keycloakClient;
         this.emailVerificationService = emailVerificationService;
         this.phoneVerificationService = phoneVerificationService;
         this.memberService = memberService;
+        this.memberPurgeService = memberPurgeService;
         this.cookieDomain = cookieDomain;
     }
 
@@ -311,6 +315,15 @@ public class AuthController {
                 .build();
     }
 
+    /**
+     * 회원 탈퇴 — 로컬 개인정보를 파기하고 Keycloak 계정을 삭제한다.
+     *
+     * <p>예전에는 {@code withdrawn_at} 만 세팅하는 soft withdraw 였는데, 그러면
+     * {@code member_addresses} 의 수령인명·연락처·주소가 그대로 남아 개인정보 파기가 되지 않았다
+     * (auth.api#40). 지금은 관리자 삭제와 <b>같은</b> {@link MemberPurgeService} 를 쓴다.
+     *
+     * <p>주문 이력(order.api)은 전자상거래법상 보존 대상이라 지우지 않는다.
+     */
     @DeleteMapping("/api/auth/me")
     public ResponseEntity<Void> deleteMe(
             @RequestHeader(value = "X-User-Email", required = false) String email) {
@@ -318,17 +331,23 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
+        // 로컬 파기를 먼저 한다. Keycloak 을 먼저 지우면 sub 를 못 찾아 로컬 개인정보가 고아로 남는다.
+        String keycloakUserId = null;
         try {
-            KeycloakClient.UserInfo user = keycloakClient.findUser(email);
-            memberService.withdrawMember(user.id());
+            keycloakUserId = keycloakClient.findUser(email).id();
+            memberPurgeService.purgeLocalData(keycloakUserId);
         } catch (Exception e) {
-            log.warn("로컬 회원 탈퇴 상태 업데이트 중 오류 발생: email={}", email, e);
+            log.warn("로컬 회원 개인정보 파기 중 오류 발생: email={}", maskEmail(email), e);
         }
 
         try {
-            keycloakClient.deleteUser(email);
+            if (keycloakUserId != null) {
+                keycloakClient.deleteUserById(keycloakUserId);
+            } else {
+                keycloakClient.deleteUser(email);
+            }
         } catch (Exception e) {
-            log.warn("Keycloak 사용자 삭제 중 오류 발생: email={}", email, e);
+            log.warn("Keycloak 사용자 삭제 중 오류 발생: email={}", maskEmail(email), e);
         }
 
         return ResponseEntity.ok()

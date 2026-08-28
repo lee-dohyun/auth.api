@@ -120,12 +120,13 @@ public class Member {
         return marketingOptOutAt;
     }
 
-    public void withdraw() {
-        this.withdrawnAt = LocalDateTime.now();
-        // 재가입 시 동일 전화번호로 가입할 수 있도록 UNIQUE 제약조건 충돌 방지 및 개인정보 보호
-        this.currentPhoneNumber = null;
-    }
-
+    /**
+     * @deprecated 탈퇴는 이제 행을 남기지 않는다 — {@code MemberPurgeService} 가 회원과 자식 행을
+     *             파기한다(auth.api#40). {@code withdrawn_at} 은 항상 null 이며 컬럼만 남아 있다.
+     *             soft withdraw 로 되돌리지 말 것: 그 방식은 {@code member_addresses} 의
+     *             수령인명·연락처·주소를 남겨 개인정보 파기 요건을 만족하지 못한다.
+     */
+    @Deprecated
     public LocalDateTime getWithdrawnAt() {
         return withdrawnAt;
     }

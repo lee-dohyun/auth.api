@@ -56,6 +56,12 @@ keycloak:
   client-id: ${KEYCLOAK_CLIENT_ID:auth-api-backend}
   client-secret: ${KEYCLOAK_CLIENT_SECRET:}
 
+# 관리자 화면(admin.front)이 보내는 토큰은 고객용 customer realm 이 아니라 staff realm 에서
+# 발급된다. product.api / order.api 도 같은 값을 쓴다 — 셋이 어긋나면 한 서비스만 403 이 된다.
+admin:
+  staff-realm-url: ${ADMIN_STAFF_REALM_URL:http://keycloak-service.keycloak.svc.cluster.local/realms/staff}
+  staff-realm-issuer: ${ADMIN_STAFF_REALM_ISSUER:https://keycloak.posselect.com/realms/staff}
+
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:https://customer.posselect.com}
   cookie-domain: ${COOKIE_DOMAIN:.posselect.com}

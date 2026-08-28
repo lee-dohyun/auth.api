@@ -448,6 +448,107 @@ public class KeycloakClient {
                 .toBodilessEntity();
     }
 
+    /**
+     * Keycloak sub(불변 식별자)로 사용자를 삭제한다.
+     *
+     * <p>{@link #deleteUser(String)} 과 달리 이메일을 거치지 않는다. 관리자 삭제는 이메일이 아니라
+     * sub 를 소유자 키로 쓰므로(캐논: 이메일은 변경 가능해 소유자 키로 쓰지 않는다) 조회 단계를
+     * 생략할 수 있고, 같은 이메일이 여러 계정에 걸려 있어도 의도한 계정만 지워진다.
+     *
+     * @return 실제로 지웠으면 true, 이미 없었으면 false
+     */
+    public boolean deleteUserById(String userId) {
+        String token = serviceAccountToken();
+        try {
+            restClient.delete()
+                    .uri("/admin/realms/{realm}/users/{id}", realm, userId)
+                    .header("Authorization", "Bearer " + token)
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (HttpClientErrorException.NotFound e) {
+            return false;
+        }
+    }
+
+    /** 관리 화면 목록에 필요한 최소 정보. */
+    public record AdminUserSummary(
+            String id, String email, String name, boolean emailVerified, boolean enabled, Long createdTimestamp) {
+    }
+
+    /**
+     * 관리 화면용 사용자 목록. <b>members 테이블이 아니라 Keycloak 을 기준으로 나열한다</b> —
+     * 회원가입이 중간에 실패해 Keycloak 에만 있고 로컬에 연동되지 않은 "좀비" 계정이 실제로 존재하며,
+     * 그런 계정이야말로 관리자가 찾아서 지워야 하는 대상이기 때문이다.
+     *
+     * @param search 이메일/이름 부분 일치 검색어(null 이면 전체)
+     */
+    @SuppressWarnings("unchecked")
+    public List<AdminUserSummary> listUsers(int first, int max, String search) {
+        String token = serviceAccountToken();
+        List<Map<String, Object>> users = restClient.get()
+                .uri(uriBuilder -> {
+                    uriBuilder.path("/admin/realms/{realm}/users")
+                            .queryParam("first", first)
+                            .queryParam("max", max);
+                    if (search != null && !search.isBlank()) {
+                        uriBuilder.queryParam("search", search);
+                    }
+                    return uriBuilder.build(realm);
+                })
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(List.class);
+        if (users == null) {
+            return List.of();
+        }
+        return users.stream().map(KeycloakClient::toSummary).toList();
+    }
+
+    /** 목록 페이징용 총 건수. */
+    public int countUsers(String search) {
+        String token = serviceAccountToken();
+        Integer count = restClient.get()
+                .uri(uriBuilder -> {
+                    uriBuilder.path("/admin/realms/{realm}/users/count");
+                    if (search != null && !search.isBlank()) {
+                        uriBuilder.queryParam("search", search);
+                    }
+                    return uriBuilder.build(realm);
+                })
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .body(Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /** sub 로 단건 조회. 없으면 empty. */
+    @SuppressWarnings("unchecked")
+    public java.util.Optional<AdminUserSummary> findUserById(String userId) {
+        String token = serviceAccountToken();
+        try {
+            Map<String, Object> user = restClient.get()
+                    .uri("/admin/realms/{realm}/users/{id}", realm, userId)
+                    .header("Authorization", "Bearer " + token)
+                    .retrieve()
+                    .body(Map.class);
+            return user == null ? java.util.Optional.empty() : java.util.Optional.of(toSummary(user));
+        } catch (HttpClientErrorException.NotFound e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private static AdminUserSummary toSummary(Map<String, Object> user) {
+        Object created = user.get("createdTimestamp");
+        return new AdminUserSummary(
+                (String) user.get("id"),
+                (String) user.get("email"),
+                (String) user.get("firstName"),
+                Boolean.TRUE.equals(user.get("emailVerified")),
+                Boolean.TRUE.equals(user.get("enabled")),
+                created instanceof Number n ? n.longValue() : null);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> findUserByEmail(String email, String token) {
         java.util.List<Map<String, Object>> users = restClient.get()
