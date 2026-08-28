@@ -22,4 +22,13 @@ public interface PhoneVerificationRepository extends JpaRepository<PhoneVerifica
     @Modifying
     @Query("DELETE FROM PhoneVerification p WHERE p.verifiedAt < :cutoff")
     int deleteVerifiedBefore(@Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * 회원 파기 시 그 회원의 인증 이력을 삭제한다.
+     *
+     * <p>member_id 만 NULL 로 끊지 않고 행을 지우는 이유: 이 테이블이 담고 있는 것은
+     * 전화번호 그 자체이므로, 연결만 끊으면 개인정보가 그대로 남는다. 또 member_id 가 NULL 인
+     * 행은 "가입 전 인증 이력"으로 해석되어 재가입 판정에 쓰인다({@code findTopBy...MemberIsNull...}).
+     */
+    int deleteByMemberId(Long memberId);
 }

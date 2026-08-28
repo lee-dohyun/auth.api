@@ -70,10 +70,7 @@ public class MemberService {
         return memberRepository.findByKeycloakUserId(keycloakUserId).isPresent();
     }
 
-    @Transactional
-    public void withdrawMember(String keycloakUserId) {
-        Member member = memberRepository.findByKeycloakUserId(keycloakUserId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-        member.withdraw();
-    }
+    // withdrawMember(soft withdraw)는 제거됐다(auth.api#40). withdrawn_at 만 세팅하는 방식은
+    // member_addresses 의 수령인명·연락처·주소를 남겨 개인정보 파기가 되지 않았다.
+    // 탈퇴·관리자 삭제 모두 MemberPurgeService 를 쓴다.
 }
