@@ -21,11 +21,8 @@ import com.dh.auth.repository.MemberRepository;
  * 최근 {@code member-grade.window-months} 개월 구매확정액은 <b>auth.api 에 저장돼 있지 않다.</b>
  * {@code members} 에는 현재 등급 FK 만 있고, {@code member_grade_history.reason} 의 금액은 등급이
  * 바뀐 시점의 문자열일 뿐이다. 그래서 산정 배치({@link MemberGradeRecalculationService})가 쓰는
- * order.api 내부 집계({@link OrderApiClient#fetchConfirmedPurchases})를 <b>같은 기준으로</b> 다시 부른다 —
- * 화면의 숫자와 다음 배치의 판정이 같은 식에서 나와야 한다.
- *
- * <p>그 집계 API 는 회원별 필터가 없어 전 회원 합계를 받아 한 건만 꺼낸다. 회원 수가 늘면
- * order.api 에 회원 단건 조회를 추가해야 한다(이번 범위 밖 — order.api 는 다른 세션이 작업 중).
+ * order.api 내부 집계와 <b>같은 기준</b>의 회원 단건 조회({@link OrderApiClient#fetchConfirmedPurchase},
+ * order.api#37)를 부른다 — 화면의 숫자와 다음 배치의 판정이 같은 식에서 나와야 한다.
  *
  * <h2>트랜잭션</h2>
  * 이 클래스에는 {@code @Transactional} 을 붙이지 않는다. 읽기 두 번은 각자 리포지토리 트랜잭션으로
@@ -107,9 +104,8 @@ public class MyGradeService {
     private BigDecimal amountTo(MemberGrade next, String keycloakUserId) {
         BigDecimal confirmed;
         try {
-            // 구매확정이 없는 회원은 응답에 없다 — 산정 배치와 똑같이 0원으로 다룬다.
-            confirmed = orderApiClient.fetchConfirmedPurchases(LocalDateTime.now().minusMonths(windowMonths))
-                    .getOrDefault(keycloakUserId, BigDecimal.ZERO);
+            confirmed = orderApiClient.fetchConfirmedPurchase(
+                    keycloakUserId, LocalDateTime.now().minusMonths(windowMonths));
         } catch (OrderApiUnavailableException e) {
             // 등급 자체는 보여 줄 수 있다. 금액만 비운다(OrderApiClient 가 이미 ERROR 로그를 남겼다).
             return null;

@@ -68,6 +68,31 @@ public class OrderApiClient {
         }
     }
 
+    /**
+     * 회원 한 명의 {@code since} 이후 구매확정 금액(order.api#37). 집계 규칙은 위 전체 집계와 같고,
+     * 구매확정이 없으면 order.api 가 0 을 준다.
+     *
+     * @throws OrderApiUnavailableException 호출에 실패하면. 호출부가 "금액을 모른다"로 다뤄야 한다
+     */
+    public BigDecimal fetchConfirmedPurchase(String customerId, LocalDateTime since) {
+        String uri = UriComponentsBuilder.fromPath("/internal/purchase-summary/{customerId}")
+                .queryParam("since", since.toString())
+                .buildAndExpand(customerId)
+                .toUriString();
+        try {
+            PurchaseSummary row = restClient.get().uri(uri).retrieve().body(PurchaseSummary.class);
+            if (row == null || row.confirmedAmount() == null) {
+                throw new OrderApiUnavailableException("order.api 응답 본문이 비어 있습니다.");
+            }
+            return row.confirmedAmount();
+        } catch (OrderApiUnavailableException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("order.api 회원 구매확정액 조회 실패. customerId={}", customerId, e);
+            throw new OrderApiUnavailableException("order.api 호출에 실패했습니다.", e);
+        }
+    }
+
     public static class OrderApiUnavailableException extends RuntimeException {
         public OrderApiUnavailableException(String message) {
             super(message);
