@@ -1,6 +1,7 @@
 package com.dh.auth.controller;
 
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -62,7 +63,8 @@ public class OnboardingController {
     /**
      * 온보딩 완료 — 필수 약관 동의를 확인하고, 방금 인증한 전화번호를 회원에 연결한다.
      *
-     * <p>이미 온보딩을 마친 회원이 다시 호출하면 아무것도 바꾸지 않고 200 을 돌려준다(멱등).
+     * <p>이미 온보딩을 마친 회원이 다시 호출하면 아무것도 바꾸지 않고 200 을 돌려준다(멱등) — 그 판정은
+     * 휴대폰 인증 확인보다 <b>앞</b>에 있어야 한다(auth.api#52).
      * 필수 약관 동의 시각은 저장하지 않는다 — 일반 가입도 저장하지 않으며, 두 경로 모두에 동의 이력을
      * 남기는 것은 스키마가 필요한 별도 작업이다.
      */
@@ -75,6 +77,16 @@ public class OnboardingController {
         }
         if (!Boolean.TRUE.equals(request.agreeTerms()) || !Boolean.TRUE.equals(request.agreePrivacy())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("AGREEMENTS_REQUIRED"));
+        }
+        // 이미 마친 회원의 재전송(응답이 유실된 뒤의 재시도)은 인증 확인보다 먼저 성공으로 답한다(auth.api#52).
+        // 첫 요청이 인증 이력을 회원에 연결했으므로 아래 "최근 인증" 조회에는 더 이상 잡히지 않는다 —
+        // 이 순서가 뒤집히면 이미 끝난 가입 마무리에 PHONE_NOT_VERIFIED 가 나간다.
+        Optional<Boolean> onboardingRequired = memberService.isOnboardingRequired(userId);
+        if (onboardingRequired.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!onboardingRequired.get()) {
+            return ResponseEntity.ok().build();
         }
         // signup 과 같은 기계 코드를 쓴다 — 프론트가 "인증 만료 → 인증 단계로 되돌리기"를 같은 분기로 처리한다.
         if (!phoneVerificationService.isRecentlyVerified(request.phoneNumber())) {

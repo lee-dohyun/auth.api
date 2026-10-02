@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -42,6 +43,8 @@ class OnboardingControllerTest {
         phoneVerificationService = mock(PhoneVerificationService.class);
         Messages messages = mock(Messages.class);
         when(messages.get("onboarding.phoneInUse")).thenReturn("이미 사용 중");
+        // 기본은 "온보딩이 남은 회원". 완료 요청은 이 판정을 지나야 인증 확인으로 간다.
+        when(memberService.isOnboardingRequired("sub-1")).thenReturn(Optional.of(true));
         mvc = MockMvcBuilders
                 .standaloneSetup(new OnboardingController(memberService, phoneVerificationService, messages))
                 .build();
@@ -99,16 +102,35 @@ class OnboardingControllerTest {
     }
 
     @Test
-    @DisplayName("완료: 정상 처리와 이미 완료된 회원의 재호출은 둘 다 200")
-    void 완료_정상_및_재호출() throws Exception {
+    @DisplayName("완료: 정상 처리는 200")
+    void 완료_정상() throws Exception {
         when(phoneVerificationService.isRecentlyVerified(PHONE)).thenReturn(true);
-        when(memberService.completeSocialOnboarding("sub-1", PHONE, true))
-                .thenReturn(OnboardingResult.COMPLETED, OnboardingResult.ALREADY_COMPLETED);
-        for (int i = 0; i < 2; i++) {
-            mvc.perform(post("/api/auth/onboarding").header("X-User-Id", "sub-1")
-                            .contentType(MediaType.APPLICATION_JSON).content(BODY))
-                    .andExpect(status().isOk());
-        }
+        when(memberService.completeSocialOnboarding("sub-1", PHONE, true)).thenReturn(OnboardingResult.COMPLETED);
+        mvc.perform(post("/api/auth/onboarding").header("X-User-Id", "sub-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isOk());
+        verify(memberService, times(1)).completeSocialOnboarding("sub-1", PHONE, true);
+    }
+
+    @Test
+    @DisplayName("완료: 이미 마친 회원의 재전송은 인증 이력이 조회되지 않아도 200, 회원은 건드리지 않는다 (#52)")
+    void 완료_재전송() throws Exception {
+        // 실제 재전송에서는 첫 요청이 인증 이력을 회원에 연결해 "최근 인증"이 false 가 된다.
+        when(memberService.isOnboardingRequired("sub-1")).thenReturn(Optional.of(false));
+        when(phoneVerificationService.isRecentlyVerified(PHONE)).thenReturn(false);
+        mvc.perform(post("/api/auth/onboarding").header("X-User-Id", "sub-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isOk());
+        verify(memberService, never()).completeSocialOnboarding(any(), any(), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("완료: 로컬 회원 행이 없는 sub 는 404")
+    void 완료_회원이_없으면_404() throws Exception {
+        when(memberService.isOnboardingRequired("sub-1")).thenReturn(Optional.empty());
+        mvc.perform(post("/api/auth/onboarding").header("X-User-Id", "sub-1")
+                        .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isNotFound());
     }
 
     @Test
