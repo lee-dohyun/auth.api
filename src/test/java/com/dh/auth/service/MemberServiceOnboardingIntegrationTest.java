@@ -9,11 +9,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.dh.auth.config.Messages;
+import com.dh.auth.controller.OnboardingController;
+import com.dh.auth.dto.AuthDtos.OnboardingRequest;
 import com.dh.auth.entity.Member;
 import com.dh.auth.entity.PhoneVerification;
 import com.dh.auth.repository.MemberRepository;
@@ -43,6 +47,12 @@ class MemberServiceOnboardingIntegrationTest {
 
     @Autowired
     private PhoneVerificationRepository verificationRepository;
+
+    @Autowired
+    private PhoneVerificationService phoneVerificationService;
+
+    @Autowired
+    private Messages messages;
 
     private static String sub() {
         return UUID.randomUUID().toString();
@@ -83,6 +93,31 @@ class MemberServiceOnboardingIntegrationTest {
         Member member = memberRepository.findByKeycloakUserId(sub).orElseThrow();
         assertThat(member.getCurrentPhoneNumber()).isEqualTo("+821055550002");
         assertThat(member.isMarketingOptIn()).isFalse();
+    }
+
+    /**
+     * auth.api#52 — 응답이 유실돼 클라이언트가 같은 요청을 다시 보내는 경우다. 첫 요청이 인증 이력을
+     * 회원에 연결하므로 두 번째에는 "최근 인증"이 조회되지 않는다. 목으로 {@code isRecentlyVerified} 를
+     * 고정하면 이 순서 문제가 보이지 않아서(실제로 그렇게 놓쳤다) HTTP 진입점부터 실 DB 로 본다.
+     */
+    @Test
+    @DisplayName("완료 요청을 그대로 다시 보내면 400 이 아니라 200 이고 값은 그대로다")
+    void 완료_요청_재전송은_성공으로_답한다() {
+        String sub = sub();
+        String phone = "+821055550006";
+        memberService.createMemberForSocialLogin(sub);
+        verificationRepository.save(new PhoneVerification(null, phone));
+        OnboardingController controller = new OnboardingController(memberService, phoneVerificationService, messages);
+        OnboardingRequest request = new OnboardingRequest(phone, true, true, true);
+
+        assertThat(controller.complete(sub, request).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(controller.complete(sub, request).getStatusCode())
+                .as("이미 마친 회원의 재전송은 인증 확인보다 먼저 성공으로 답해야 한다")
+                .isEqualTo(HttpStatus.OK);
+
+        Member member = memberRepository.findByKeycloakUserId(sub).orElseThrow();
+        assertThat(member.getCurrentPhoneNumber()).isEqualTo(phone);
+        assertThat(member.isMarketingOptIn()).isTrue();
     }
 
     @Test
