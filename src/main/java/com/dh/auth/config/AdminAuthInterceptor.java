@@ -35,7 +35,9 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
      * {@code WebConfig.addPathPatterns} 둘 다 등록할 것.
      */
     private static final Map<String, String[]> PATH_ROLES = Map.of(
-            "/api/admin/members", new String[] { "MEMBER_MANAGER", "SYSTEM_ADMIN" });
+            "/api/admin/members", new String[] { "MEMBER_MANAGER", "SYSTEM_ADMIN" },
+            // 등급 정책 관리(gateway#80). 회원 등급 수동 조정은 /api/admin/members/{sub}/grade 라 위 규칙을 탄다.
+            "/api/admin/member-grades", new String[] { "MEMBER_MANAGER", "SYSTEM_ADMIN" });
 
     private final AdminJwtVerifier verifier;
 
