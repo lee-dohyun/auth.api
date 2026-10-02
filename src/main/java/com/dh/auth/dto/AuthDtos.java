@@ -36,6 +36,20 @@ public class AuthDtos {
             @NotBlank(message = "{validation.otp.required}") String code) {
     }
 
+    /**
+     * 소셜 로그인 회원의 온보딩 완료 요청(auth.api#42). 필수 약관 두 개는 true 여야 하고,
+     * 전화번호는 직전에 send-otp/verify-otp 로 인증한 번호와 같은 값이어야 한다.
+     */
+    public record OnboardingRequest(
+            @NotBlank(message = "{validation.phone.required}")
+            @ValidPhoneNumber
+            String phoneNumber,
+            Boolean agreeTerms,
+            Boolean agreePrivacy,
+            /** 마케팅 정보 수신 동의(선택). 누락되면 동의하지 않은 것으로 본다. */
+            Boolean marketingOptIn) {
+    }
+
     public record LoginRequest(String email, String password, Boolean rememberMe) {
     }
 

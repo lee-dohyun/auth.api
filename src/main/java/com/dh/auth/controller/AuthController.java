@@ -163,6 +163,7 @@ public class AuthController {
         }
 
         // 액세스 토큰으로 사용자 정보 조회 후 로컬 Member 엔티티가 없으면 생성 (최초 로그인)
+        String landingPath = "/mypage";
         try {
             KeycloakClient.UserInfo user = keycloakClient.userInfo(token.accessToken());
             if (!memberService.existsByKeycloakUserId(user.id())) {
@@ -170,6 +171,10 @@ public class AuthController {
                 log.info("소셜 로그인 신규 가입 - 고객번호={}, 이메일={}", user.id(), user.email());
             }
             log.info("소셜 로그인 성공 - 고객번호={}, 이메일={}, 고객명={}", user.id(), user.email(), user.name());
+            // 약관 동의·휴대폰 인증을 아직 안 한 회원(최초 로그인 포함)은 온보딩으로 보낸다(auth.api#42).
+            if (memberService.isOnboardingRequired(user.id()).orElse(false)) {
+                landingPath = "/onboarding";
+            }
         } catch (Exception e) {
             log.error("소셜 로그인 사용자 동기화 실패", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -193,7 +198,7 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.status(HttpStatus.FOUND)
-                .header("Location", "/mypage")
+                .header("Location", landingPath)
                 .header("Set-Cookie", accessCookie.toString())
                 .header("Set-Cookie", refreshCookie.toString())
                 .header("Set-Cookie", clearedState.toString())
