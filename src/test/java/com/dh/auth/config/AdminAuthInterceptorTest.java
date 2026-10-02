@@ -83,6 +83,19 @@ class AdminAuthInterceptorTest {
     }
 
     @Test
+    @DisplayName("등급 정책 API(/api/admin/member-grades)도 MEMBER_MANAGER 는 통과, 다른 역할은 403 (gateway#80)")
+    void 등급_정책_API도_역할을_본다() throws Exception {
+        givenToken(new AdminPrincipal("member@posselect.com", Set.of("MEMBER_MANAGER")));
+        assertThat(interceptor.preHandle(
+                request("PUT", "/api/admin/member-grades/SILVER"), new MockHttpServletResponse(), null)).isTrue();
+
+        givenToken(new AdminPrincipal("order@posselect.com", Set.of("ORDER_MANAGER")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        assertThat(interceptor.preHandle(request("GET", "/api/admin/member-grades"), response, null)).isFalse();
+        assertThat(response.getStatus()).isEqualTo(403);
+    }
+
+    @Test
     @DisplayName("PATH_ROLES에 등록되지 않은 관리 경로는 통과가 아니라 거부된다 (설정 누락 fail-closed)")
     void 미등록_경로는_거부된다() throws Exception {
         givenToken(new AdminPrincipal("root@posselect.com", Set.of("SYSTEM_ADMIN")));
