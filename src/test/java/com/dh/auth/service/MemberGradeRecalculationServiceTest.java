@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -158,6 +159,45 @@ class MemberGradeRecalculationServiceTest {
 
         assertThat(result.changed()).isZero();
         verify(memberGradeHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("고정된 회원은 건너뛴다 — 구매확정액이 없어도 수동 조정한 등급이 유지된다 (#49)")
+    void lockedMemberIsSkipped() {
+        Member locked = member("user-1", vip);
+        locked.lockGrade(null);
+        Member free = member("user-2", vip);
+        when(memberRepository.findAll()).thenReturn(List.of(locked, free));
+        givenPurchases(Map.of());
+
+        var result = service.recalculateAll();
+
+        assertThat(locked.getCurrentGrade().getCode()).isEqualTo("VIP");
+        assertThat(free.getCurrentGrade().getCode()).isEqualTo("GENERAL");
+        assertThat(result.examined()).isEqualTo(2);
+        assertThat(result.changed()).isEqualTo(1);
+        assertThat(result.skippedLocked()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("유지 기한 당일까지는 고정이고, 지난 고정은 지우고 평소대로 계산한다 (#49)")
+    void lockExpiry() {
+        LocalDate today = LocalDate.now(MemberGradeRecalculationService.GRADE_ZONE);
+        Member untilToday = member("user-1", vip);
+        untilToday.lockGrade(today);
+        Member expired = member("user-2", vip);
+        expired.lockGrade(today.minusDays(1));
+        when(memberRepository.findAll()).thenReturn(List.of(untilToday, expired));
+        givenPurchases(Map.of());
+
+        var result = service.recalculateAll();
+
+        assertThat(untilToday.getCurrentGrade().getCode()).isEqualTo("VIP");
+        assertThat(untilToday.isGradeLocked()).isTrue();
+        assertThat(expired.getCurrentGrade().getCode()).isEqualTo("GENERAL");
+        assertThat(expired.isGradeLocked()).isFalse();
+        assertThat(expired.getGradeLockedUntil()).isNull();
+        assertThat(result.skippedLocked()).isEqualTo(1);
     }
 
     @Test

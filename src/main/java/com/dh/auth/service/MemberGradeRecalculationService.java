@@ -1,7 +1,9 @@
 package com.dh.auth.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -35,12 +37,20 @@ import com.dh.auth.repository.MemberRepository;
  *       주문 경로에 등급 계산이 얹혀 결제 지연으로 이어진다</li>
  *   <li><b>강등 허용</b>: 산정 결과가 낮으면 내려간다. 내리지 않으면 기간 기준이 무의미해진다</li>
  *   <li><b>소급 없음</b>: 배치가 도는 시점부터 적용된다</li>
+ *   <li><b>고정된 회원은 건너뛴다</b>(auth.api#49): 관리자가 수동 조정한 등급은 유지 기한까지 그대로 둔다.
+ *       기한이 지난 고정은 여기서 지우고 평소대로 계산한다</li>
  * </ul>
  */
 @Service
 public class MemberGradeRecalculationService {
 
     private static final Logger log = LoggerFactory.getLogger(MemberGradeRecalculationService.class);
+
+    /**
+     * 등급 정책의 "오늘"을 정하는 시간대. 배치가 KST 로 돌고({@code MemberGradeScheduler}) 관리자가 고르는
+     * 유지 기한도 KST 날짜다. 파드의 JVM 은 UTC 라 시간대를 명시하지 않으면 자정~09시에 하루가 어긋난다.
+     */
+    public static final ZoneId GRADE_ZONE = ZoneId.of("Asia/Seoul");
 
     private final MemberRepository memberRepository;
     private final MemberGradeRepository memberGradeRepository;
@@ -61,7 +71,8 @@ public class MemberGradeRecalculationService {
         this.windowMonths = windowMonths;
     }
 
-    public record Result(int examined, int changed) {
+    /** @param skippedLocked 등급 고정으로 건너뛴 회원 수 */
+    public record Result(int examined, int changed, int skippedLocked) {
     }
 
     /**
@@ -84,8 +95,18 @@ public class MemberGradeRecalculationService {
         }
 
         List<Member> members = memberRepository.findAll();
+        LocalDate today = LocalDate.now(GRADE_ZONE);
         int changed = 0;
+        int skippedLocked = 0;
         for (Member member : members) {
+            if (member.isGradeLockedOn(today)) {
+                skippedLocked++;
+                continue;
+            }
+            if (member.isGradeLocked()) {
+                // 유지 기한이 지났다. 표시를 지워 두지 않으면 "고정인데 유효하지 않은" 행이 계속 남는다.
+                member.unlockGrade();
+            }
             // 구매확정이 없는 회원은 응답에 없다 — 0원으로 다뤄야 강등이 동작한다.
             BigDecimal amount = confirmed.getOrDefault(member.getKeycloakUserId(), BigDecimal.ZERO);
             MemberGrade target = resolveGrade(grades, amount);
@@ -100,8 +121,9 @@ public class MemberGradeRecalculationService {
             changed++;
         }
 
-        log.info("회원 등급 재산정 완료. 대상 {}명, 변경 {}명, 기준일 {}", members.size(), changed, since);
-        return new Result(members.size(), changed);
+        log.info("회원 등급 재산정 완료. 대상 {}명, 변경 {}명, 고정으로 건너뜀 {}명, 기준일 {}",
+                members.size(), changed, skippedLocked, since);
+        return new Result(members.size(), changed, skippedLocked);
     }
 
     /**

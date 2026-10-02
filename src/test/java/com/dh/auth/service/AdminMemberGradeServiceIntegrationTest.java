@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +78,9 @@ class AdminMemberGradeServiceIntegrationTest {
 
     @Autowired
     private MemberGradeHistoryRepository memberGradeHistoryRepository;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     // ───────────── 등급 정책 ─────────────
 
@@ -298,21 +302,154 @@ class AdminMemberGradeServiceIntegrationTest {
         assertThat(detail.history()).hasSize(1);
     }
 
+    // ───────────── 등급 고정 (auth.api#49) ─────────────
+
     @Test
-    @DisplayName("월 배치는 수동 조정을 덮어쓴다 — 구매확정액이 없으면 VIP 로 올린 회원이 GENERAL 로 되돌아간다")
-    void 월_배치가_수동_조정을_덮어쓴다() {
+    @DisplayName("수동 조정한 등급은 유지 기한까지 월 배치가 건너뛴다 — 구매확정액이 없어도 VIP 가 그대로다")
+    void 유지_기한까지_배치가_건너뛴다() {
         String sub = UUID.randomUUID().toString();
         givenMember(sub);
-        service.adjustMemberGrade(sub, new GradeAdjustRequest("VIP", "배치 상호작용 검증"), "t@posselect.com");
+        LocalDate until = today().plusDays(30);
+        service.adjustMemberGrade(sub, new GradeAdjustRequest("VIP", "CS 보상", until), "t@posselect.com");
+        when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(Map.of());
+
+        var result = recalculationService.recalculateAll();
+
+        MemberGradeDetail detail = service.getMemberGrade(sub);
+        assertThat(detail.grade().code()).isEqualTo("VIP");
+        assertThat(detail.lock().locked()).isTrue();
+        assertThat(detail.lock().until()).isEqualTo(until);
+        assertThat(detail.history()).hasSize(2); // 가입 → 수동 조정. 재산정 이력은 생기지 않는다
+        assertThat(result.skippedLocked()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("유지 기한을 비우면 해제할 때까지 고정된다")
+    void 기한_없는_고정은_무기한이다() {
+        String sub = UUID.randomUUID().toString();
+        givenMember(sub);
+        service.adjustMemberGrade(sub, new GradeAdjustRequest("GOLD", "무기한 고정"), "t@posselect.com");
         when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(Map.of());
 
         recalculationService.recalculateAll();
 
         MemberGradeDetail detail = service.getMemberGrade(sub);
+        assertThat(detail.grade().code()).isEqualTo("GOLD");
+        assertThat(detail.lock().locked()).isTrue();
+        assertThat(detail.lock().until()).isNull();
+    }
+
+    @Test
+    @DisplayName("유지 기한 당일까지는 고정이고, 지나면 배치가 다시 계산하고 고정 표시를 지운다")
+    void 기한이_지나면_배치가_다시_계산한다() {
+        String sub = UUID.randomUUID().toString();
+        Member member = givenMember(sub);
+        service.adjustMemberGrade(sub, new GradeAdjustRequest("VIP", "기한 검증", today()), "t@posselect.com");
+        when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(Map.of());
+
+        recalculationService.recalculateAll();
+        assertThat(service.getMemberGrade(sub).grade().code())
+                .as("기한 당일은 아직 고정이다")
+                .isEqualTo("VIP");
+
+        // 하루가 지난 상태를 만든다 — 과거 날짜는 API 로는 넣을 수 없어 행을 직접 고친다.
+        jdbcTemplate.update("UPDATE members SET grade_locked_until = ? WHERE id = ?",
+                java.sql.Date.valueOf(today().minusDays(1)), member.getId());
+        assertThat(service.getMemberGrade(sub).lock().locked())
+                .as("기한이 지난 고정은 배치가 돌기 전에도 유효한 고정이 아니다")
+                .isFalse();
+
+        recalculationService.recalculateAll();
+
+        MemberGradeDetail detail = service.getMemberGrade(sub);
         assertThat(detail.grade().code()).isEqualTo("GENERAL");
-        assertThat(detail.history()).hasSize(3); // 가입 → 수동 조정 → 재산정
         assertThat(detail.history().get(0).reason()).contains("재산정").contains("VIP -> GENERAL");
-        assertThat(detail.history().get(1).reason()).startsWith("수동 조정: ");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT grade_locked FROM members WHERE id = ?", Boolean.class, member.getId())).isFalse();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT grade_locked_until FROM members WHERE id = ?", java.sql.Date.class, member.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("고정 해제: 등급은 그대로 두고 고정만 풀어 다음 배치부터 다시 계산된다. 같은 해제 2회 → 이력 1건")
+    void 고정_해제() {
+        String sub = UUID.randomUUID().toString();
+        givenMember(sub);
+        service.adjustMemberGrade(sub, new GradeAdjustRequest("VIP", "해제 검증"), "t@posselect.com");
+
+        GradeAdjustResponse first = service.releaseGradeLock(sub, "t@posselect.com");
+        GradeAdjustResponse second = service.releaseGradeLock(sub, "t@posselect.com");
+
+        assertThat(first.changed()).isTrue();
+        assertThat(second.changed()).isFalse();
+        MemberGradeDetail released = service.getMemberGrade(sub);
+        assertThat(released.grade().code()).isEqualTo("VIP");
+        assertThat(released.lock().locked()).isFalse();
+        assertThat(released.history()).hasSize(3); // 가입 → 수동 조정 → 고정 해제
+        assertThat(released.history().get(0).reason()).isEqualTo("수동 조정: 고정 해제");
+
+        when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(Map.of());
+        recalculationService.recalculateAll();
+        assertThat(service.getMemberGrade(sub).grade().code()).isEqualTo("GENERAL");
+    }
+
+    @Test
+    @DisplayName("같은 등급이라도 유지 기한이 다르면 기한만 바뀌고, 완전히 같은 요청은 아무것도 바꾸지 않는다")
+    void 같은_등급_기한_변경() {
+        String sub = UUID.randomUUID().toString();
+        givenMember(sub);
+        LocalDate first = today().plusDays(10);
+        LocalDate extended = today().plusDays(40);
+        service.adjustMemberGrade(sub, new GradeAdjustRequest("GOLD", "최초", first), "t@posselect.com");
+
+        GradeAdjustResponse changed = service.adjustMemberGrade(
+                sub, new GradeAdjustRequest("GOLD", "기한 연장", extended), "t@posselect.com");
+        GradeAdjustResponse replay = service.adjustMemberGrade(
+                sub, new GradeAdjustRequest("GOLD", "기한 연장", extended), "t@posselect.com");
+
+        assertThat(changed.changed()).isTrue();
+        assertThat(replay.changed()).isFalse();
+        MemberGradeDetail detail = service.getMemberGrade(sub);
+        assertThat(detail.lock().until()).isEqualTo(extended);
+        assertThat(detail.history()).hasSize(3); // 가입 → 최초 조정 → 기한 연장
+        assertThat(detail.history().get(0).reason()).isEqualTo("수동 조정: 기한 연장");
+    }
+
+    @Test
+    @DisplayName("지난 날짜를 유지 기한으로 주면 400 이고 회원은 그대로다")
+    void 지난_유지_기한은_거부() {
+        String sub = UUID.randomUUID().toString();
+        givenMember(sub);
+
+        assertThatThrownBy(() -> service.adjustMemberGrade(
+                sub, new GradeAdjustRequest("VIP", "과거 기한", today().minusDays(1)), "t@posselect.com"))
+                .isInstanceOfSatisfying(AdminMemberGradeException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(e.getError()).isEqualTo("LOCK_UNTIL_IN_PAST");
+                });
+
+        MemberGradeDetail detail = service.getMemberGrade(sub);
+        assertThat(detail.grade().code()).isEqualTo("GENERAL");
+        assertThat(detail.lock().locked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("수동 조정한 적 없는 회원은 고정이 아니고, 배치가 평소대로 계산한다")
+    void 고정되지_않은_회원은_그대로_재산정된다() {
+        String sub = UUID.randomUUID().toString();
+        givenMember(sub);
+        when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(Map.of(sub, new BigDecimal("1500000")));
+
+        recalculationService.recalculateAll();
+
+        MemberGradeDetail detail = service.getMemberGrade(sub);
+        assertThat(detail.grade().code()).isEqualTo("GOLD");
+        assertThat(detail.lock().locked()).isFalse();
+    }
+
+    /** 등급 정책의 "오늘"은 KST 다(배치가 KST 로 돈다). */
+    private static LocalDate today() {
+        return LocalDate.now(MemberGradeRecalculationService.GRADE_ZONE);
     }
 
     /** 회원가입과 같은 상태(기본 등급 + 가입 이력 1건)의 회원을 실제로 저장한다. */

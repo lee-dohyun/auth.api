@@ -34,7 +34,8 @@ public class MemberGradeScheduler {
     public void recalculate() {
         try {
             var result = recalculationService.recalculateAll();
-            log.info("[등급배치] 대상 {}명 중 {}명 변경", result.examined(), result.changed());
+            log.info("[등급배치] 대상 {}명 중 {}명 변경, 고정으로 {}명 건너뜀",
+                    result.examined(), result.changed(), result.skippedLocked());
         } catch (Exception e) {
             // 배치 실패로 애플리케이션을 죽이지 않는다. 다음 달까지 기다릴 수 없으면
             // /internal/member-grades/recalculate 로 수동 재실행할 수 있다.

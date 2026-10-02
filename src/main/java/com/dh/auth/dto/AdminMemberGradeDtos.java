@@ -1,8 +1,11 @@
 package com.dh.auth.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 /**
  * 관리자 등급 관리 화면(admin.front)이 쓰는 요청·응답 형태 (gateway#80).
@@ -13,6 +16,12 @@ public final class AdminMemberGradeDtos {
 
     private AdminMemberGradeDtos() {
     }
+
+    /**
+     * 유지 기한의 JSON 형식. ObjectMapper 설정에 맡기면 환경에 따라 {@code [2026,12,31]} 배열로 나갈 수 있어
+     * (WRITE_DATES_AS_TIMESTAMPS) 화면이 기대는 형식을 필드에 못박는다.
+     */
+    private static final String DATE_PATTERN = "yyyy-MM-dd";
 
     /**
      * 등급 정책 한 줄.
@@ -62,15 +71,40 @@ public final class AdminMemberGradeDtos {
     public record GradeHistoryItem(String gradeCode, String gradeName, String reason, LocalDateTime assignedAt) {
     }
 
+    /**
+     * 등급 고정 상태 (auth.api#49).
+     *
+     * @param locked 지금 유효한 고정인가. 기한이 지난 고정은 false 다(정기 재산정이 돌기 전이라도)
+     * @param until  유지 기한 — 고정이 유효한 마지막 날(KST). null 이면 해제할 때까지. 고정이 아니면 항상 null
+     */
+    public record GradeLock(boolean locked, @JsonFormat(pattern = DATE_PATTERN) LocalDate until) {
+    }
+
     /** @param history 최신 순 */
-    public record MemberGradeDetail(String keycloakUserId, CurrentGrade grade, List<GradeHistoryItem> history) {
+    public record MemberGradeDetail(
+            String keycloakUserId, CurrentGrade grade, GradeLock lock, List<GradeHistoryItem> history) {
     }
 
-    /** @param reason 필수. 이력에 "수동 조정: {reason}" 으로 남는다 */
-    public record GradeAdjustRequest(String gradeCode, String reason) {
+    /**
+     * 수동 조정하면 그 등급은 고정된다 — 정기 재산정이 유지 기한까지 이 회원을 건너뛴다.
+     *
+     * @param reason      필수. 이력에 "수동 조정: {reason}" 으로 남는다
+     * @param lockedUntil 유지 기한(그날 포함, KST). null 이면 해제할 때까지 고정. 지난 날짜는 거부된다
+     */
+    public record GradeAdjustRequest(
+            String gradeCode, String reason, @JsonFormat(pattern = DATE_PATTERN) LocalDate lockedUntil) {
+
+        /** 유지 기한 없이(해제할 때까지) 고정하는 조정. */
+        public GradeAdjustRequest(String gradeCode, String reason) {
+            this(gradeCode, reason, null);
+        }
     }
 
-    /** @param changed false 면 이미 그 등급이라 아무것도 바꾸지 않았다(이력도 늘지 않는다) */
+    /**
+     * 수동 조정·고정 해제의 응답.
+     *
+     * @param changed false 면 이미 그 상태라 아무것도 바꾸지 않았다(이력도 늘지 않는다)
+     */
     public record GradeAdjustResponse(boolean changed, MemberGradeDetail member) {
     }
 }

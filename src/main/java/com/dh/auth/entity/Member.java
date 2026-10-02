@@ -1,5 +1,6 @@
 package com.dh.auth.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -55,6 +56,17 @@ public class Member {
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
+    /**
+     * 수동 조정한 등급이 고정돼 있는가(auth.api#49). 고정된 회원은 정기 재산정이 건너뛴다.
+     * 유효한 고정인지는 기한까지 봐야 하므로 {@link #isGradeLockedOn} 으로 판정할 것.
+     */
+    @Column(name = "grade_locked", nullable = false)
+    private boolean gradeLocked;
+
+    /** 고정이 유효한 마지막 날(그날 포함). null 이면 해제할 때까지. */
+    @Column(name = "grade_locked_until")
+    private LocalDate gradeLockedUntil;
+
     protected Member() {
     }
 
@@ -66,6 +78,23 @@ public class Member {
 
     public void changeGrade(MemberGrade newGrade) {
         this.currentGrade = newGrade;
+    }
+
+    /** 등급을 고정한다. @param until 유지할 마지막 날. null 이면 해제할 때까지 */
+    public void lockGrade(LocalDate until) {
+        this.gradeLocked = true;
+        this.gradeLockedUntil = until;
+    }
+
+    /** 고정을 푼다. 기한도 같이 지운다 — 고정이 아닌데 기한만 남으면 ck_members_grade_lock_until 에 걸린다. */
+    public void unlockGrade() {
+        this.gradeLocked = false;
+        this.gradeLockedUntil = null;
+    }
+
+    /** {@code today} 에 고정이 유효한가. 기한 당일까지는 유효하고, 기한이 없으면 해제 전까지 유효하다. */
+    public boolean isGradeLockedOn(LocalDate today) {
+        return gradeLocked && (gradeLockedUntil == null || !gradeLockedUntil.isBefore(today));
     }
 
     public void changePhoneNumber(String phoneNumber) {
@@ -106,6 +135,14 @@ public class Member {
 
     public String getCurrentPhoneNumber() {
         return currentPhoneNumber;
+    }
+
+    public boolean isGradeLocked() {
+        return gradeLocked;
+    }
+
+    public LocalDate getGradeLockedUntil() {
+        return gradeLockedUntil;
     }
 
     public boolean isMarketingOptIn() {
