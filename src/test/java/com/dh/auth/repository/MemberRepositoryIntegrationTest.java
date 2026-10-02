@@ -89,4 +89,23 @@ class MemberRepositoryIntegrationTest {
                         () -> memberRepository.saveAndFlush(new Member(keycloakUserId, generalGrade)))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
+
+    @Test
+    @DisplayName("회원의 현재 등급을 할인율과 함께 바로 읽는다 — 주문 할인의 근거(gateway#82)")
+    void 현재_등급을_keycloak_sub로_조회한다() {
+        MemberGrade gold = memberGradeRepository.findByCode("GOLD").orElseThrow();
+        String keycloakUserId = UUID.randomUUID().toString();
+        memberRepository.saveAndFlush(new Member(keycloakUserId, gold));
+
+        MemberGrade found = memberRepository.findCurrentGradeByKeycloakUserId(keycloakUserId).orElseThrow();
+
+        assertThat(found.getCode()).isEqualTo("GOLD");
+        assertThat(found.getDiscountRate()).isEqualByComparingTo("5.00");
+    }
+
+    @Test
+    @DisplayName("로컬 회원 행이 없는 sub 는 등급이 없다 — 호출자가 할인 없음으로 처리한다")
+    void 없는_회원은_등급이_비어있다() {
+        assertThat(memberRepository.findCurrentGradeByKeycloakUserId(UUID.randomUUID().toString())).isEmpty();
+    }
 }
