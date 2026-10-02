@@ -2,6 +2,7 @@ package com.dh.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,7 +87,9 @@ class MyGradeServiceTest {
     }
 
     private void confirmed(Map<String, BigDecimal> amounts) {
-        when(orderApiClient.fetchConfirmedPurchases(any())).thenReturn(amounts);
+        // 구매확정이 없는 회원은 order.api 단건 조회가 0 을 준다.
+        when(orderApiClient.fetchConfirmedPurchase(eq(SUB), any()))
+                .thenReturn(amounts.getOrDefault(SUB, BigDecimal.ZERO));
     }
 
     @Test
@@ -95,7 +98,7 @@ class MyGradeServiceTest {
         when(memberRepository.findCurrentGradeByKeycloakUserId(SUB)).thenReturn(Optional.empty());
 
         assertThat(service.find(SUB)).isEmpty();
-        verify(orderApiClient, never()).fetchConfirmedPurchases(any());
+        verify(orderApiClient, never()).fetchConfirmedPurchase(any(), any());
     }
 
     @Test
@@ -148,14 +151,14 @@ class MyGradeServiceTest {
         assertThat(result.code()).isEqualTo("VIP");
         assertThat(result.nextGrade()).isNull();
         assertThat(result.amountToNextGrade()).isNull();
-        verify(orderApiClient, never()).fetchConfirmedPurchases(any());
+        verify(orderApiClient, never()).fetchConfirmedPurchase(any(), any());
     }
 
     @Test
     @DisplayName("order.api 집계가 실패하면 등급은 보여 주되 남은 금액만 null 이다")
     void 집계_실패() {
         currentGrade(silver);
-        when(orderApiClient.fetchConfirmedPurchases(any()))
+        when(orderApiClient.fetchConfirmedPurchase(eq(SUB), any()))
                 .thenThrow(new OrderApiUnavailableException("down"));
 
         MyGrade result = service.find(SUB).orElseThrow();
@@ -174,6 +177,6 @@ class MyGradeServiceTest {
 
         assertThat(result.nextGrade()).isNull();
         assertThat(result.amountToNextGrade()).isNull();
-        verify(orderApiClient, never()).fetchConfirmedPurchases(any());
+        verify(orderApiClient, never()).fetchConfirmedPurchase(any(), any());
     }
 }
