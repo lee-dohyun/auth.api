@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +31,7 @@ import com.dh.auth.dto.AdminMemberGradeDtos.CurrentGrade;
 import com.dh.auth.dto.AdminMemberGradeDtos.GradeAdjustRequest;
 import com.dh.auth.dto.AdminMemberGradeDtos.GradeAdjustResponse;
 import com.dh.auth.dto.AdminMemberGradeDtos.GradeHistoryItem;
+import com.dh.auth.dto.AdminMemberGradeDtos.GradeLock;
 import com.dh.auth.dto.AdminMemberGradeDtos.GradePolicy;
 import com.dh.auth.dto.AdminMemberGradeDtos.GradePolicyCreateResult;
 import com.dh.auth.dto.AdminMemberGradeDtos.MemberGradeDetail;
@@ -103,6 +105,7 @@ class AdminMemberGradeControllerTest {
     @DisplayName("수동 조정은 처리자 이메일을 토큰(요청 속성)에서 읽어 서비스에 넘기고 changed·member 를 돌려준다")
     void 수동_조정() throws Exception {
         MemberGradeDetail detail = new MemberGradeDetail("sub-1", new CurrentGrade("VIP", "VIP", new BigDecimal("10.00")),
+                new GradeLock(true, null),
                 List.of(new GradeHistoryItem("VIP", "VIP", "수동 조정: CS 보상", LocalDateTime.of(2026, 10, 2, 12, 0))));
         when(service.adjustMemberGrade(eq("sub-1"), eq(new GradeAdjustRequest("VIP", "CS 보상")), eq("admin@posselect.com")))
                 .thenReturn(new GradeAdjustResponse(true, detail));
@@ -117,7 +120,42 @@ class AdminMemberGradeControllerTest {
                 .andExpect(jsonPath("$.changed").value(true))
                 .andExpect(jsonPath("$.member.keycloakUserId").value("sub-1"))
                 .andExpect(jsonPath("$.member.grade.code").value("VIP"))
+                .andExpect(jsonPath("$.member.lock.locked").value(true))
+                .andExpect(jsonPath("$.member.lock.until").doesNotExist())
                 .andExpect(jsonPath("$.member.history[0].reason").value("수동 조정: CS 보상"))
                 .andExpect(jsonPath("$.member.history[0].gradeCode").value("VIP"));
+    }
+
+    @Test
+    @DisplayName("수동 조정의 유지 기한은 lockedUntil(YYYY-MM-DD)로 받고, 응답은 lock.until 로 같은 형식을 돌려준다 (#49)")
+    void 수동_조정_유지_기한() throws Exception {
+        LocalDate until = LocalDate.of(2026, 12, 31);
+        MemberGradeDetail detail = new MemberGradeDetail("sub-1", new CurrentGrade("VIP", "VIP", new BigDecimal("10.00")),
+                new GradeLock(true, until), List.of());
+        when(service.adjustMemberGrade(eq("sub-1"), eq(new GradeAdjustRequest("VIP", "연말까지", until)), eq("unknown")))
+                .thenReturn(new GradeAdjustResponse(true, detail));
+
+        mvc.perform(put("/api/admin/members/sub-1/grade")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"gradeCode":"VIP","reason":"연말까지","lockedUntil":"2026-12-31"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.member.lock.locked").value(true))
+                .andExpect(jsonPath("$.member.lock.until").value("2026-12-31"));
+    }
+
+    @Test
+    @DisplayName("고정 해제는 DELETE .../grade/lock 이고 changed·member 를 돌려준다 (#49)")
+    void 고정_해제() throws Exception {
+        MemberGradeDetail detail = new MemberGradeDetail("sub-1", new CurrentGrade("VIP", "VIP", new BigDecimal("10.00")),
+                new GradeLock(false, null), List.of());
+        when(service.releaseGradeLock("sub-1", "admin@posselect.com")).thenReturn(new GradeAdjustResponse(true, detail));
+
+        mvc.perform(delete("/api/admin/members/sub-1/grade/lock")
+                        .requestAttr(AdminAuthInterceptor.PRINCIPAL_ATTRIBUTE,
+                                new AdminPrincipal("admin@posselect.com", Set.of("MEMBER_MANAGER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(true))
+                .andExpect(jsonPath("$.member.lock.locked").value(false));
     }
 }

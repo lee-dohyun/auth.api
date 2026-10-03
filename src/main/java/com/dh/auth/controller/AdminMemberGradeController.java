@@ -35,7 +35,8 @@ import com.dh.auth.service.AdminMemberGradeService;
  * {@code SYSTEM_ADMIN}). 경로가 두 갈래다:
  * <ul>
  *   <li>{@code /api/admin/member-grades/**} — 등급 정책. 인터셉터 {@code PATH_ROLES} 에 따로 등록돼 있다</li>
- *   <li>{@code /api/admin/members/{sub}/grade} — 회원 등급. {@code /api/admin/members} 규칙을 그대로 탄다</li>
+ *   <li>{@code /api/admin/members/{sub}/grade}(조회·수동 조정), {@code .../grade/lock}(고정 해제) — 회원 등급.
+ *       {@code /api/admin/members} 규칙을 그대로 탄다</li>
  * </ul>
  * 경로를 바꾸면 {@code PATH_ROLES} 와 admin.front {@code lib/menu.ts} 의 apiPrefixes 도 같이 고칠 것.
  *
@@ -87,6 +88,15 @@ public class AdminMemberGradeController {
             @RequestAttribute(name = AdminAuthInterceptor.PRINCIPAL_ATTRIBUTE, required = false)
             AdminPrincipal admin) {
         return service.adjustMemberGrade(keycloakUserId, request, admin == null ? "unknown" : admin.email());
+    }
+
+    /** 등급 고정 해제(auth.api#49). 등급은 그대로 두고 다음 정기 재산정부터 다시 계산되게 한다. */
+    @DeleteMapping("/members/{keycloakUserId}/grade/lock")
+    public GradeAdjustResponse releaseGradeLock(
+            @PathVariable String keycloakUserId,
+            @RequestAttribute(name = AdminAuthInterceptor.PRINCIPAL_ATTRIBUTE, required = false)
+            AdminPrincipal admin) {
+        return service.releaseGradeLock(keycloakUserId, admin == null ? "unknown" : admin.email());
     }
 
     /** 거부 사유는 {@code {"error": 코드, "message": 설명}} 으로 돌려준다 — 화면이 코드로 문구를 고른다. */
