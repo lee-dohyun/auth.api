@@ -1,5 +1,6 @@
 package com.dh.auth.controller;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -62,6 +63,10 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.items[0].id").value(n.getPublicId().toString()))
                 .andExpect(jsonPath("$.items[0].read").value(false))
                 .andExpect(jsonPath("$.items[0].title").value("결제 완료"))
+                // 시각은 오프셋을 붙여 내보낸다 — 서버(UTC)와 브라우저(KST)의 시간대가 달라, 오프셋 없는 문자열은
+                // 헤더에서 9시간 어긋난 "n시간 전" 이 된다.
+                .andExpect(jsonPath("$.items[0].createdAt")
+                        .value(matchesPattern("\\d{4}-\\d{2}-\\d{2}T[\\d:.]+(Z|[+-]\\d{2}:\\d{2})")))
                 .andExpect(jsonPath("$.items[0].memberId").doesNotExist())
                 .andExpect(jsonPath("$.items[0].dedupKey").doesNotExist());
     }
