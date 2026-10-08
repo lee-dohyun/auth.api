@@ -35,7 +35,7 @@ dependencies {
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'com.googlecode.libphonenumber:libphonenumber:9.0.37'
+	implementation 'com.googlecode.libphonenumber:libphonenumber:9.0.40'
 	// Solapi SMS 연동 SDK
 	implementation 'net.nurigo:sdk:4.3.2'
 	constraints {
