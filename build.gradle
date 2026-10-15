@@ -36,7 +36,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	// RestClient.Builder 빈도 Boot 4 에서는 별도 모듈이다(gateway#348).
 	implementation 'org.springframework.boot:spring-boot-starter-restclient'
-	implementation 'com.googlecode.libphonenumber:libphonenumber:9.0.37'
+	implementation 'com.googlecode.libphonenumber:libphonenumber:9.0.41'
 	// Solapi SMS 연동 SDK
 	implementation 'net.nurigo:sdk:4.3.2'
 	constraints {
